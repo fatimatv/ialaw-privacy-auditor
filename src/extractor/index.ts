@@ -1,6 +1,12 @@
 import * as cheerio from "cheerio";
 import type { Element } from "domhandler";
-import type { CampoFormulario, DatosCrawler, FormularioDetectado } from "../analyzer/types";
+import type {
+  CampoFormulario,
+  CookiesBannerDetectado,
+  DatosCrawler,
+  FormularioDetectado,
+  PoliticaPrivacidadDetectada,
+} from "../analyzer/types";
 
 type EvidenciaPublicaEntrada = {
   url: string;
@@ -10,6 +16,34 @@ type EvidenciaPublicaEntrada = {
 
 const TEXTO_POLITICA = /(privacidad|protecci[oó]n de datos|datos personales|privacy)/i;
 const TEXTO_COOKIES = /(cookie|cookies|aceptar|rechazar|configurar|personalizar)/i;
+
+// Selectores conocidos de Consent Management Platforms. Capturan banners
+// inyectados por OneTrust, Cookiebot, Didomi, CookieYes, Quantcast,
+// TrustArc, TermsFeed e Iubenda, que la deteccion generica por id/class
+// que contengan "cookie" muchas veces no encuentra.
+const SELECTORES_CMP = [
+  "#onetrust-banner-sdk",
+  "#onetrust-consent-sdk",
+  "#CybotCookiebotDialog",
+  "#didomi-host",
+  "#didomi-notice",
+  ".didomi-popup-container",
+  "#cky-consent",
+  ".cky-consent-container",
+  ".cky-modal",
+  "#qc-cmp2-ui",
+  ".qc-cmp2-container",
+  "#truste-consent-track",
+  "#consent_blackbar",
+  ".termsfeed-com---nb-simple",
+  "#iubenda-cs-banner",
+  ".iubenda-cs-container",
+  "#osano-cm-window",
+  ".osano-cm-window",
+];
+
+const PATRONES_CMP_SCRIPT =
+  /(onetrust\.com\/cdn|cookielaw\.org|cookiebot\.com\/uc|sdk\.privacy-center\.org|didomi\.io|cookieyes\.com|quantcast\.mgr|trustarc\.com|iubenda\.com\/iubenda_cs|osano\.com\/(cmp|web))/i;
 
 function resolverUrl(base: string, href?: string): string | undefined {
   if (!href) return undefined;
@@ -96,7 +130,27 @@ function extraerFormularios($: cheerio.CheerioAPI, url: string): FormularioDetec
     });
 }
 
-function extraerBannerCookies($: cheerio.CheerioAPI) {
+function extraerBannerCookies($: cheerio.CheerioAPI, html: string): CookiesBannerDetectado {
+  for (const selector of SELECTORES_CMP) {
+    const elemento = $(selector).first();
+    if (elemento.length === 0) continue;
+    const texto = textoNormalizado(elemento.text());
+    if (texto.length > 0 && texto.length < 1500) {
+      return { encontrado: true, texto };
+    }
+    return {
+      encontrado: true,
+      texto: "Banner detectado por selector CMP conocido (sin texto visible — probablemente inyectado dinamicamente).",
+    };
+  }
+
+  if (PATRONES_CMP_SCRIPT.test(html)) {
+    return {
+      encontrado: true,
+      texto: "CMP detectada por script de terceros — el banner puede inyectarse despues de la carga inicial.",
+    };
+  }
+
   const candidatos = $("[id*='cookie' i], [class*='cookie' i], [aria-label*='cookie' i]")
     .toArray()
     .map((elemento) => textoNormalizado($(elemento).text()))
@@ -118,7 +172,60 @@ export function extraerEvidenciaPublica(entrada: EvidenciaPublicaEntrada): Datos
     url_auditada: entrada.url,
     politica_privacidad: extraerPolitica($, entrada.url, entrada.politicaTexto),
     formularios: extraerFormularios($, entrada.url),
-    cookies_banner: extraerBannerCookies($),
+    cookies_banner: extraerBannerCookies($, html),
     html_completo: html,
+  };
+}
+
+type CombinarEvidenciasEntrada = {
+  url_auditada: string;
+  paginas: DatosCrawler[];
+  politica_texto?: string;
+  politica_url?: string;
+};
+
+function claveDedupFormulario(f: FormularioDetectado): string {
+  const nombres = f.campos.map((c) => c.name ?? "").sort().join(",");
+  return `${f.pagina_origen}|${nombres}`;
+}
+
+export function combinarEvidencias(entrada: CombinarEvidenciasEntrada): DatosCrawler {
+  const { url_auditada, paginas, politica_texto, politica_url } = entrada;
+
+  const vistos = new Set<string>();
+  const formularios: FormularioDetectado[] = [];
+  for (const pagina of paginas) {
+    for (const formulario of pagina.formularios) {
+      const clave = claveDedupFormulario(formulario);
+      if (vistos.has(clave)) continue;
+      vistos.add(clave);
+      formularios.push(formulario);
+    }
+  }
+
+  const cookies_banner: CookiesBannerDetectado =
+    paginas.find((p) => p.cookies_banner.encontrado)?.cookies_banner ?? {
+      encontrado: false,
+      texto: "",
+    };
+
+  const html_completo = paginas.map((p) => p.html_completo ?? "").join("\n");
+
+  const primeraConPolitica = paginas.find((p) => p.politica_privacidad?.url);
+  const urlPolitica = politica_url ?? primeraConPolitica?.politica_privacidad?.url;
+  const textoPolitica = textoNormalizado(politica_texto ?? "");
+
+  const politica_privacidad: PoliticaPrivacidadDetectada = {
+    encontrada: Boolean(urlPolitica || textoPolitica),
+    url: urlPolitica,
+    texto: textoPolitica,
+  };
+
+  return {
+    url_auditada,
+    politica_privacidad,
+    formularios,
+    cookies_banner,
+    html_completo,
   };
 }
