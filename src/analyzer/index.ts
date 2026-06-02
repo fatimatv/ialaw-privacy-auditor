@@ -464,6 +464,26 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
   const observaciones: Observacion[] = []
   let contadorElementosFaltantesArt18 = 0
 
+  // Resultados de los detectores: se calculan una sola vez y se reutilizan
+  // tanto para levantar observaciones como para el calculo de
+  // elementos_cumplidos al final. Si la politica no existe los detectores
+  // corren sobre texto vacio y todos devuelven cumple=false, que es el
+  // comportamiento esperado.
+  const detectores = {
+    identidad: det.identidadResponsable(texto),
+    finalidad: det.finalidad(texto),
+    destinatarios: det.destinatarios(texto),
+    transferencia: det.transferenciaInternacional(texto),
+    bancoDatos: det.bancoDatos(texto),
+    obligatoriedad: det.obligatoriedad(texto),
+    consecuencias: det.consecuencias(texto),
+    plazo: det.plazoConservacion(texto),
+    arco: det.derechosARCO(texto),
+    automatizadas: det.decisionesAutomatizadas(texto),
+    lenguaje: det.calidadLenguaje(texto),
+    reglamento: det.reglamentoVigente(texto),
+  }
+
   // ── MÓDULO A: POLÍTICA DE PRIVACIDAD ──
 
   // A.0 — Existencia de la política
@@ -484,7 +504,7 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
   } else {
 
     // A.2 — Identidad y domicilio
-    const r_identidad = det.identidadResponsable(texto)
+    const r_identidad = detectores.identidad
     if (!r_identidad.cumple) {
       contadorElementosFaltantesArt18++
       observaciones.push({
@@ -513,7 +533,7 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
     // CONDICIONAMIENTO_ILICITO, CONSENTIMIENTO_EN_BLOQUE, AUSENCIA_TOTAL).
     // Hoy siempre cae en el texto de 'ausencia/insuficiente'; revisar si
     // se quiere diferenciar el hallazgo y la recomendacion por nivel.
-    const r_finalidad = det.finalidad(texto)
+    const r_finalidad = detectores.finalidad
     if (!r_finalidad.cumple) {
       contadorElementosFaltantesArt18++
       observaciones.push({
@@ -531,7 +551,7 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
     }
 
     // A.4 — Destinatarios
-    const r_dest = det.destinatarios(texto)
+    const r_dest = detectores.destinatarios
     if (!r_dest.cumple) {
       contadorElementosFaltantesArt18++
       observaciones.push({
@@ -549,7 +569,7 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
     }
 
     // A.4b — Transferencia internacional
-    const r_transf = det.transferenciaInternacional(texto)
+    const r_transf = detectores.transferencia
     if (!r_transf.cumple) {
       contadorElementosFaltantesArt18++
       observaciones.push({
@@ -571,7 +591,7 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
     }
 
     // A.5 — Banco de datos
-    const r_banco = det.bancoDatos(texto)
+    const r_banco = detectores.bancoDatos
     if (!r_banco.cumple || r_banco.cumple === 'PARCIAL') {
       if (!r_banco.cumple) contadorElementosFaltantesArt18++
       observaciones.push({
@@ -591,7 +611,7 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
     }
 
     // A.6 — Carácter obligatorio/facultativo
-    const r_oblig = det.obligatoriedad(texto)
+    const r_oblig = detectores.obligatoriedad
     if (!r_oblig.cumple) {
       contadorElementosFaltantesArt18++
       observaciones.push({
@@ -609,7 +629,7 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
     }
 
     // A.7 — Consecuencias
-    const r_consec = det.consecuencias(texto)
+    const r_consec = detectores.consecuencias
     if (!r_consec.cumple) {
       contadorElementosFaltantesArt18++
       observaciones.push({
@@ -627,7 +647,7 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
     }
 
     // A.8 — Plazo de conservación
-    const r_plazo = det.plazoConservacion(texto)
+    const r_plazo = detectores.plazo
     if (!r_plazo.cumple) {
       contadorElementosFaltantesArt18++
       observaciones.push({
@@ -647,7 +667,7 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
     }
 
     // A.9 — Derechos ARCO
-    const r_arco = det.derechosARCO(texto)
+    const r_arco = detectores.arco
     if (!r_arco.cumple) {
       const nivelArco = r_arco.nivel || ''
       if (nivelArco === 'AUSENCIA_TOTAL') contadorElementosFaltantesArt18++
@@ -668,7 +688,7 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
     }
 
     // A.10 — Decisiones automatizadas
-    const r_auto = det.decisionesAutomatizadas(texto)
+    const r_auto = detectores.automatizadas
     if (!r_auto.cumple) {
       observaciones.push({
         id: `OBS-${String(observaciones.length + 1).padStart(2, '0')}`,
@@ -685,7 +705,7 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
     }
 
     // A.11 — Calidad del lenguaje y forma
-    const r_lenguaje = det.calidadLenguaje(texto)
+    const r_lenguaje = detectores.lenguaje
     if (!r_lenguaje.cumple) {
       observaciones.push({
         id: `OBS-${String(observaciones.length + 1).padStart(2, '0')}`,
@@ -702,7 +722,7 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
     }
 
     // A.12 — Alertas normativas
-    const r_norm = det.reglamentoVigente(texto)
+    const r_norm = detectores.reglamento
     if (!r_norm.cumple) {
       const niveles = (r_norm.nivel || '').split('+')
       niveles.forEach(nivel => {
@@ -885,11 +905,11 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
   puntaje = Math.max(0, puntaje)
 
   const elementosCumplidos = []
-  if (det.identidadResponsable(texto).cumple) elementosCumplidos.push('Identidad y domicilio del responsable declarados (Art. 18 Ley 29733)')
-  if (det.finalidad(texto).cumple) elementosCumplidos.push('Finalidades del tratamiento declaradas (Art. 7 + 18 Ley 29733)')
-  if (det.destinatarios(texto).cumple) elementosCumplidos.push('Destinatarios identificados (Art. 18 Ley 29733)')
-  if (det.plazoConservacion(texto).cumple) elementosCumplidos.push('Plazo de conservación indicado (Art. 18 Ley 29733)')
-  if (det.derechosARCO(texto).cumple) elementosCumplidos.push('Derechos ARCO con canal de ejercicio informados (Art. 18-19 Ley 29733)')
+  if (detectores.identidad.cumple) elementosCumplidos.push('Identidad y domicilio del responsable declarados (Art. 18 Ley 29733)')
+  if (detectores.finalidad.cumple) elementosCumplidos.push('Finalidades del tratamiento declaradas (Art. 7 + 18 Ley 29733)')
+  if (detectores.destinatarios.cumple) elementosCumplidos.push('Destinatarios identificados (Art. 18 Ley 29733)')
+  if (detectores.plazo.cumple) elementosCumplidos.push('Plazo de conservación indicado (Art. 18 Ley 29733)')
+  if (detectores.arco.cumple) elementosCumplidos.push('Derechos ARCO con canal de ejercicio informados (Art. 18-19 Ley 29733)')
   if (formularios.every(f => !f.checkbox_premarcado)) elementosCumplidos.push('No se detectaron checkboxes pre-marcados')
 
   return {
