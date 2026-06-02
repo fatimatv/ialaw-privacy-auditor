@@ -385,11 +385,6 @@ const detForm = {
     })
     return alertas
   },
-
-  // B.3 — Condicionamiento del servicio (Art. 3.2 DS 016)
-  condicionamientoServicio(texto: string): boolean {
-    return /(al.*aceptar.*política.*acceder|solo.*si.*acepta|debe.*aceptar.*para.*usar|condición.*uso.*acepta.*datos)/i.test(texto)
-  },
 }
 
 // ─────────────────────────────────────────────────
@@ -511,25 +506,27 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
     }
 
     // A.3 — Finalidad
+    // TODO(legal): el bloque original ramificaba sobre el nivel
+    // 'FINES_ADICIONALES_SIN_CONSENTIMIENTO_INDEPENDIENTE', pero
+    // det.finalidad() nunca lo retorna (los niveles reales son
+    // FINALIDAD_GENERICA, SIN_DISTINCION_FINALIDADES, SIN_MECANISMO_NEGATIVA,
+    // CONDICIONAMIENTO_ILICITO, CONSENTIMIENTO_EN_BLOQUE, AUSENCIA_TOTAL).
+    // Hoy siempre cae en el texto de 'ausencia/insuficiente'; revisar si
+    // se quiere diferenciar el hallazgo y la recomendacion por nivel.
     const r_finalidad = det.finalidad(texto)
     if (!r_finalidad.cumple) {
       contadorElementosFaltantesArt18++
-      const esFinAdic = r_finalidad.nivel === 'FINES_ADICIONALES_SIN_CONSENTIMIENTO_INDEPENDIENTE'
       observaciones.push({
         id: `OBS-${String(observaciones.length + 1).padStart(2, '0')}`,
         modulo: 'A',
         categoria: 'Finalidad del tratamiento',
-        severidad: esFinAdic ? 'GRAVE' : 'GRAVE',
-        hallazgo: esFinAdic
-          ? 'Se declaran finalidades adicionales (marketing, perfilamiento, publicidad) sin un mecanismo de consentimiento independiente para cada una.'
-          : 'La política no declara las finalidades del tratamiento.',
+        severidad: 'GRAVE',
+        hallazgo: 'La política no declara las finalidades del tratamiento.',
         evidencia: 'AUSENTE o INSUFICIENTE en la política.',
         norma_vulnerada: 'Art. 18 + Art. 7 (principio de finalidad) Ley 29733 + Art. 10.2 DS 016-2024-JUS',
         riesgo_infraccion: 'grave',
         base_infraccion: 'Art. 133.3 DS 016-2024-JUS',
-        recomendacion: esFinAdic
-          ? 'Implementar un mecanismo de consentimiento separado e independiente (checkbox no pre-marcado) para cada finalidad adicional a la principal.'
-          : 'Declarar de forma clara, explícita y lícita las finalidades para las que se tratan los datos.'
+        recomendacion: 'Declarar de forma clara, explícita y lícita las finalidades para las que se tratan los datos.'
       })
     }
 
@@ -637,7 +634,7 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
         id: `OBS-${String(observaciones.length + 1).padStart(2, '0')}`,
         modulo: 'A',
         categoria: 'Plazo de conservación de datos',
-        severidad: r_plazo.nivel === 'PLAZO_INDETERMINADO' ? 'IMPORTANTE' : 'IMPORTANTE',
+        severidad: 'IMPORTANTE',
         hallazgo: r_plazo.nivel === 'PLAZO_INDETERMINADO'
           ? 'El plazo de conservación declarado es vago e indeterminado ("el tiempo necesario") sin criterio claro que lo delimite.'
           : 'La política no informa el plazo o criterio de conservación de los datos personales.',
@@ -846,7 +843,7 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
       id: `OBS-${String(observaciones.length + 1).padStart(2, '0')}`,
       modulo: 'C',
       categoria: 'Banner de cookies',
-      severidad: r_banner.nivel === 'SIN_BANNER' ? 'MODERADA' : 'MODERADA',
+      severidad: 'MODERADA',
       hallazgo: r_banner.nivel === 'SIN_BANNER'
         ? 'No se detectó banner o aviso de cookies en el sitio.'
         : r_banner.nivel === 'SOLO_BOTON_ACEPTAR'

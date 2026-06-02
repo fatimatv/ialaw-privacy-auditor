@@ -10,7 +10,6 @@ type EvidenciaPublicaEntrada = {
 
 const TEXTO_POLITICA = /(privacidad|protecci[oó]n de datos|datos personales|privacy)/i;
 const TEXTO_COOKIES = /(cookie|cookies|aceptar|rechazar|configurar|personalizar)/i;
-const CAMPOS_PERSONALES = /(nombre|apellido|email|correo|dni|documento|telefono|tel[eé]fono|direcci[oó]n)/i;
 
 function resolverUrl(base: string, href?: string): string | undefined {
   if (!href) return undefined;
@@ -46,6 +45,13 @@ function extraerPolitica($: cheerio.CheerioAPI, url: string, politicaTexto?: str
   };
 }
 
+function buscarLabelPorFor($: cheerio.CheerioAPI, id: string): string {
+  const label = $("label")
+    .toArray()
+    .find((el) => $(el).attr("for") === id);
+  return label ? textoNormalizado($(label).text()) : "";
+}
+
 function extraerCampos($: cheerio.CheerioAPI, formulario: Element): CampoFormulario[] {
   return $(formulario)
     .find("input, textarea, select")
@@ -53,7 +59,7 @@ function extraerCampos($: cheerio.CheerioAPI, formulario: Element): CampoFormula
     .map((campo) => {
       const elemento = $(campo);
       const id = elemento.attr("id");
-      const label = id ? textoNormalizado($(`label[for="${id}"]`).first().text()) : "";
+      const label = id ? buscarLabelPorFor($, id) : "";
 
       return {
         name: elemento.attr("name") ?? elemento.attr("id") ?? "",
@@ -74,9 +80,6 @@ function extraerFormularios($: cheerio.CheerioAPI, url: string): FormularioDetec
       const textoFormulario = textoNormalizado(form.text());
       const paginaOrigen = resolverUrl(url, form.attr("action")) ?? url;
       const checkboxes = form.find("input[type='checkbox']");
-      const tieneCamposPersonales = campos.some((campo) =>
-        CAMPOS_PERSONALES.test(`${campo.name} ${campo.placeholder} ${campo.label}`)
-      );
 
       return {
         pagina_origen: paginaOrigen,
@@ -88,7 +91,7 @@ function extraerFormularios($: cheerio.CheerioAPI, url: string): FormularioDetec
           .find("a")
           .toArray()
           .some((link) => TEXTO_POLITICA.test(`${$(link).text()} ${$(link).attr("href") ?? ""}`)),
-        campos: tieneCamposPersonales ? campos : campos,
+        campos,
       };
     });
 }
