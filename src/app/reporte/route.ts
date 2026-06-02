@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { chromium } from "playwright";
 import type { ResultadoAuditoria } from "@/analyzer/types";
+import { limitadorReporte, obtenerIdentificadorCliente } from "@/lib/rate-limit";
 import { crearHtmlReporte } from "@/report/pdf";
 
 export const runtime = "nodejs";
@@ -20,6 +21,18 @@ function nombreArchivoReporte(resultado: ResultadoAuditoria): string {
 }
 
 export async function POST(request: Request) {
+  const identificador = obtenerIdentificadorCliente(request.headers);
+  const limite = limitadorReporte.check(identificador);
+  if (!limite.allowed) {
+    return NextResponse.json(
+      { error: "Has alcanzado el limite de descargas de reporte. Intenta nuevamente mas tarde." },
+      {
+        status: 429,
+        headers: { "Retry-After": String(limite.retryAfterSeconds ?? 60) },
+      },
+    );
+  }
+
   const body = (await request.json().catch(() => null)) as SolicitudReporte | null;
 
   if (!body?.resultado) {
