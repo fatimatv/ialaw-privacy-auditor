@@ -20,7 +20,19 @@ function formatearFecha(fechaIso: string): string {
   return new Intl.DateTimeFormat("es-PE", {
     dateStyle: "long",
     timeStyle: "short",
+    timeZone: "America/Lima",
   }).format(fecha);
+}
+
+function renderRiesgo(observacion: { riesgo_infraccion?: string; rango_multa_aplicable?: string }): string {
+  const partes: string[] = [];
+  if (observacion.riesgo_infraccion) {
+    partes.push(`<p><strong>Riesgo de infraccion:</strong> ${escaparHtml(observacion.riesgo_infraccion)}</p>`);
+  }
+  if (observacion.rango_multa_aplicable) {
+    partes.push(`<p><strong>Rango de multa aplicable:</strong> ${escaparHtml(observacion.rango_multa_aplicable)}</p>`);
+  }
+  return partes.join("");
 }
 
 export function crearHtmlReporte(resultado: ResultadoAuditoria): string {
@@ -39,6 +51,7 @@ export function crearHtmlReporte(resultado: ResultadoAuditoria): string {
           <p><strong>Evidencia:</strong> ${escaparHtml(observacion.evidencia)}</p>
           <p><strong>Norma vulnerada:</strong> ${escaparHtml(observacion.norma_vulnerada)}</p>
           <p><strong>Base infraccion:</strong> ${escaparHtml(observacion.base_infraccion)}</p>
+          ${renderRiesgo(observacion)}
           <p><strong>Recomendacion:</strong> ${escaparHtml(observacion.recomendacion)}</p>
         </article>
       `

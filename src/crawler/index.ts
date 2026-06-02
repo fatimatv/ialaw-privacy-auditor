@@ -1,5 +1,6 @@
 import { chromium } from "playwright";
 import { extraerEvidenciaPublica } from "../extractor";
+import { validarUrlPublica } from "./url-guard";
 
 const TEXTO_POLITICA = /(privacidad|protecci[oó]n de datos|datos personales|privacy)/i;
 
@@ -8,20 +9,14 @@ type EnlaceCandidato = {
   texto?: string;
 };
 
+export { validarUrlPublica } from "./url-guard";
+
 export function seleccionarHrefPolitica(enlaces: EnlaceCandidato[]): string | undefined {
   return enlaces.find((link) => TEXTO_POLITICA.test(`${link.texto ?? ""} ${link.href ?? ""}`))?.href;
 }
 
-function validarUrlPublica(url: string): string {
-  const parsed = new URL(url);
-  if (!["http:", "https:"].includes(parsed.protocol)) {
-    throw new Error("Solo se admiten URLs http o https.");
-  }
-  return parsed.toString();
-}
-
 export async function auditarSitioPublico(urlEntrada: string) {
-  const url = validarUrlPublica(urlEntrada);
+  const url = await validarUrlPublica(urlEntrada);
   const browser = await chromium.launch({ headless: true });
 
   try {
@@ -43,10 +38,15 @@ export async function auditarSitioPublico(urlEntrada: string) {
 
     let politicaTexto = "";
     if (politicaHref) {
-      const policyPage = await browser.newPage();
-      await policyPage.goto(politicaHref, { waitUntil: "domcontentloaded", timeout: 30000 }).catch(() => undefined);
-      politicaTexto = await policyPage.locator("body").innerText({ timeout: 5000 }).catch(() => "");
-      await policyPage.close();
+      try {
+        await validarUrlPublica(politicaHref);
+        const policyPage = await browser.newPage();
+        await policyPage.goto(politicaHref, { waitUntil: "domcontentloaded", timeout: 30000 }).catch(() => undefined);
+        politicaTexto = await policyPage.locator("body").innerText({ timeout: 5000 }).catch(() => "");
+        await policyPage.close();
+      } catch {
+        politicaTexto = "";
+      }
     }
 
     return extraerEvidenciaPublica({ url, html, politicaTexto });
