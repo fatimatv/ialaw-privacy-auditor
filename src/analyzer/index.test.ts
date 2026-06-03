@@ -58,6 +58,52 @@ describe("analizarCumplimiento", () => {
     expect(observacionDomicilio).toBeUndefined();
   });
 
+  it("reconoce el código RNPDP cuando se declara con frase 'con registro NNNNN' (sin la sigla RNPDP)", async () => {
+    // Caso real Starbucks: la política dice "bancos de datos denominados
+    // 'Usuarios Web', con registro 19086" — sin la palabra "RNPDP".
+    const texto = `
+      Empresa Demo S.A.C. con RUC 20123456789, domiciliada en Av. Principal 123, Miraflores, Lima.
+      Finalidad: gestión de clientes.
+      Los datos personales serán almacenados en los bancos de datos denominados "Usuarios Web", con registro 19086.
+      Datos obligatorios y facultativos identificados.
+      Si no proporciona los datos no podremos brindar el servicio.
+      Conservamos los datos durante la vigencia del contrato.
+      Derechos ARCO via arco@example.com. Puede revocar el consentimiento.
+      La Autoridad Nacional de Protección de Datos Personales es la autoridad de tutela.
+      Ley 29733 y DS 016-2024-JUS.
+    `;
+    const resultado = await analizarCumplimiento({
+      url_auditada: "https://example.com",
+      politica_privacidad: { encontrada: true, texto },
+      formularios: [],
+      cookies_banner: { encontrado: false, texto: "" },
+      html_completo: "",
+    });
+    const obsBanco = resultado.observaciones.find((o) => o.categoria === "Banco de datos personales");
+    expect(obsBanco).toBeUndefined();
+  });
+
+  it("sigue reportando PARCIAL cuando se menciona banco de datos sin ningun codigo", async () => {
+    const texto = `
+      Empresa Demo S.A.C. con RUC 20123456789, domiciliada en Av. Principal 123, Miraflores, Lima.
+      Finalidad: gestión de clientes.
+      Los datos se almacenan en un banco de datos personales propio.
+      Datos obligatorios y facultativos. Si no proporciona no atenderemos.
+      Conservamos durante la vigencia. Derechos ARCO via x@y.com. Revocar.
+      ANPDP autoridad tutela. Ley 29733.
+    `;
+    const resultado = await analizarCumplimiento({
+      url_auditada: "https://example.com",
+      politica_privacidad: { encontrada: true, texto },
+      formularios: [],
+      cookies_banner: { encontrado: false, texto: "" },
+      html_completo: "",
+    });
+    const obsBanco = resultado.observaciones.find((o) => o.categoria === "Banco de datos personales");
+    expect(obsBanco).toBeDefined();
+    expect(obsBanco?.severidad).toBe("MODERADA");
+  });
+
   it("sigue reportando como incompleto un domicilio sin via ni frase introductoria", async () => {
     const texto = `
       Empresa Demo S.A.C. RUC 20123456789. Enrique Palacios 360.

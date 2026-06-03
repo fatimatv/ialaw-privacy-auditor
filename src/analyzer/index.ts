@@ -246,9 +246,31 @@ const det = {
   },
 
   // A.5 — BANCO DE DATOS
+  // menciona: el texto habla de un banco/base de datos personales o RNPDP.
+  //   Acepta plural ("bancos de datos") y singular ("banco de datos").
+  // tieneCodigoRNPDP: el codigo de inscripcion puede aparecer en varios
+  //   formatos. Antes solo se aceptaba el patron canonico "RNPDP N° XXXXX",
+  //   pero en politicas peruanas reales tambien aparece como:
+  //     "con registro 19086"
+  //     "registro N° 19086"
+  //     "codigo de inscripcion: 19086"
+  //     "inscrito con N° 19086"
+  //     "banco de datos denominado X, N° 19086"
   bancoDatos(t: string): ResultadoDetector {
-    const menciona = /(banco\s+de\s+datos|base\s+de\s+datos\s+personal|RNPDP|registro\s+nacional)/i.test(t)
-    const tieneCodigoRNPDP = /RNPDP\s*[n°º\-#]?\s*\d{3,}/i.test(t)
+    const menciona = /(bancos?\s+de\s+datos|bases?\s+de\s+datos\s+personal|RNPDP|registro\s+nacional)/i.test(t)
+    const tieneCodigoRNPDP =
+      // (a) Forma canonica: RNPDP N° XXXXX (o RNPDP: XXXXX, RNPDP 19086).
+      /RNPDP\s*[n°º\-:#]?\s*\d{3,}/i.test(t) ||
+      // (b) "registro|inscripcion|codigo de inscripcion" + digitos, con o
+      //     sin separador y con o sin "N°" intermedio. Como ya validamos
+      //     que el texto habla de un banco de datos, "registro 19086" o
+      //     "con registro 19086" se interpreta razonablemente como el
+      //     codigo de inscripcion en el RNPDP.
+      /\b(?:con\s+)?(?:registro|inscripci[oó]n|c[oó]digo\s+de\s+inscripci[oó]n)\s*(?:[#:.-]\s*|n[°º]?\s*[:.]?\s*)?\d{3,}/i.test(t) ||
+      // (c) "N° XXXXX" o "Nro XXXXX" cerca de la mencion del banco de datos
+      //     (dentro de ~300 caracteres / misma oracion extendida).
+      /(?:bancos?|bases?)\s+de\s+datos[^.]{0,300}\b(?:n[°º]|nro\.?|num\.?)\s*[:.]?\s*\d{3,}/i.test(t)
+
     if (!menciona) return { cumple: false, nivel: 'AUSENCIA', detalles: ['La política no menciona el banco de datos en que se almacenarán los datos (Art. 18 Ley 29733 — deber de informar + Art. 6.1.4 DS 016-2024-JUS + Guía ANPDP sobre el Deber de Informar §4.4).'] }
     if (!tieneCodigoRNPDP) return { cumple: 'PARCIAL', nivel: 'SIN_CODIGO_RNPDP', detalles: ['Se menciona el banco de datos pero no se indica el código de inscripción en el Registro Nacional de Protección de Datos Personales — RNPDP (Art. 29 + Art. 34 Ley 29733 — inscripción obligatoria del banco de datos + Art. 6.1.4 DS 016-2024-JUS + Guía ANPDP sobre el Deber de Informar §4.4).'] }
     return { cumple: true }
