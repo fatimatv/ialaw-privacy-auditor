@@ -25,12 +25,10 @@ export async function lanzarChromium(): Promise<Browser> {
     sparticuz.setHeadlessMode = "shell";
     sparticuz.setGraphicsMode = false;
     const executablePath = await sparticuz.executablePath();
-    // Cast a boolean porque playwright-core@1.60 todavia no expone
-    // el modo "shell" en sus tipos, pero en runtime lo acepta.
     return playwrightChromium.launch({
       args: sparticuz.args,
       executablePath,
-      headless: sparticuz.headless as unknown as boolean,
+      headless: true,
     });
   }
   return playwrightChromium.launch({ headless: true });
