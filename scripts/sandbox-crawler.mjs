@@ -102,7 +102,6 @@ const URLS_NO_NAVEGABLES =
 const TIMEOUT_NAV_MS = 30_000;
 const TIMEOUT_NETWORKIDLE_MS = 8_000;
 const TIMEOUT_SITEMAP_MS = 10_000;
-const TIMEOUT_POLITICA_MS = 5_000;
 
 function normalizarUrl(href) {
   try {

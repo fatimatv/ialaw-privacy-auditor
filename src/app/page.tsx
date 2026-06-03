@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { FormEvent, useMemo, useState } from "react";
 import type { ResultadoAuditoria } from "@/analyzer/types";
 
@@ -100,32 +101,48 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-[#f7f8fb] text-[#111827]">
-      <section className="border-b border-[#dfe3ef] bg-[#011EF4] text-white">
-        <div className="mx-auto flex min-h-[44vh] max-w-6xl flex-col justify-between px-6 py-8 sm:px-10">
-          <header className="flex items-center justify-between gap-4">
-            <div className="text-xl font-black tracking-[0.22em]">IALAW</div>
-            <div className="rounded-full border border-white/30 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white/85">
-              Motor deterministico
-            </div>
-          </header>
+      <header className="sticky top-0 z-50 border-b border-[#dfe3ef] bg-white/95 backdrop-blur">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-4 sm:px-10">
+          <Link href="/" className="flex items-center gap-3">
+            <span className="text-lg font-black tracking-[0.22em] text-[#011EF4]">IALAW</span>
+            <span className="hidden text-xs font-semibold uppercase tracking-wider text-[#6F7072] sm:inline">
+              · Privacy Auditor
+            </span>
+          </Link>
+          <a
+            href="https://www.iriartelaw.com/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hidden text-xs font-bold uppercase tracking-wide text-[#011EF4] hover:text-[#0015a8] sm:inline"
+          >
+            iriartelaw.com →
+          </a>
+        </div>
+      </header>
 
-          <div className="grid gap-10 py-10 lg:grid-cols-[1.1fr_0.9fr] lg:items-end">
+      <section className="border-b border-[#dfe3ef] bg-gradient-to-br from-[#011EF4] via-[#011EF4] to-[#0015a8] text-white">
+        <div className="mx-auto flex max-w-6xl flex-col gap-10 px-6 py-14 sm:px-10 lg:py-20">
+          <div className="grid gap-10 lg:grid-cols-[1.1fr_0.9fr] lg:items-end">
             <div>
-              <p className="mb-4 text-sm font-bold uppercase tracking-[0.2em] text-[#FBBB02]">
-                Auditoría pública de privacidad
+              <p className="mb-4 text-xs font-bold uppercase tracking-[0.22em] text-[#FBBB02]">
+                Auditoría pública de privacidad · Ley N° 29733 + DS 016-2024-JUS
               </p>
-              <h1 className="max-w-3xl text-4xl font-black uppercase leading-tight sm:text-6xl">
+              <h1 className="max-w-3xl text-4xl font-black uppercase leading-[1.05] sm:text-5xl lg:text-6xl">
                 Auditoría en protección de datos personales de sitios web
               </h1>
-              <p className="mt-5 max-w-2xl text-base leading-7 text-white/82">
-                El flujo visita una URL publica, extrae politica, formularios, cookies y HTML visible,
-                y evalua el resultado con el motor juridico existente.
+              <p className="mt-6 max-w-2xl text-base leading-7 text-white/85">
+                Motor determinístico. Visita la URL pública, extrae política, formularios,
+                banner de cookies y trackers, y evalúa el contenido contra la normativa
+                peruana vigente.
               </p>
             </div>
 
-            <form onSubmit={auditar} className="border border-white/20 bg-white p-3 text-[#111827] shadow-2xl">
+            <form
+              onSubmit={auditar}
+              className="rounded-2xl border border-white/20 bg-white p-4 text-[#111827] shadow-2xl"
+            >
               <label htmlFor="url" className="sr-only">
-                URL publica a auditar
+                URL pública a auditar
               </label>
               <div className="flex flex-col gap-3 sm:flex-row">
                 <input
@@ -136,74 +153,76 @@ export default function Home() {
                   placeholder="https://empresa.com"
                   value={url}
                   onChange={(event) => setUrl(event.target.value)}
-                  className="min-h-14 flex-1 border border-[#d9deea] bg-white px-4 text-base outline-none transition focus:border-[#011EF4] focus:ring-4 focus:ring-[#011EF4]/15"
+                  className="min-h-14 flex-1 rounded-xl border border-[#d9deea] bg-white px-4 text-base outline-none transition focus:border-[#011EF4] focus:ring-4 focus:ring-[#011EF4]/15"
                 />
                 <button
                   type="submit"
                   disabled={cargando}
-                  className="min-h-14 bg-[#FBBB02] px-6 text-sm font-black uppercase tracking-wide text-[#111827] transition hover:bg-white disabled:cursor-wait disabled:opacity-70"
+                  className="min-h-14 rounded-xl bg-[#FBBB02] px-6 text-sm font-black uppercase tracking-wide text-[#111827] shadow-sm transition hover:bg-[#e7a900] hover:shadow disabled:cursor-wait disabled:opacity-70"
                 >
-                  {cargando ? "Auditando" : "Auditar"}
+                  {cargando ? "Auditando…" : "Auditar"}
                 </button>
               </div>
               <p className="mt-3 text-xs leading-5 text-[#6F7072]">
-                No usa APIs externas ni IA. No envia formularios ni accede a areas privadas.
+                Sin APIs externas ni IA. No se envían formularios ni se accede a áreas privadas.
               </p>
             </form>
           </div>
         </div>
       </section>
 
-      <section className="mx-auto grid max-w-6xl gap-6 px-6 py-8 sm:px-10 lg:grid-cols-[0.8fr_1.2fr]">
+      <section className="mx-auto grid max-w-6xl gap-6 px-6 py-10 sm:px-10 lg:grid-cols-[0.8fr_1.2fr]">
         <aside className="space-y-4">
-          <div className="border border-[#dfe3ef] bg-white p-5">
-            <h2 className="text-sm font-black uppercase tracking-wide text-[#011EF4]">Estado</h2>
+          <div className="rounded-2xl border border-[#dfe3ef] bg-white p-6 shadow-sm">
+            <h2 className="text-xs font-black uppercase tracking-[0.18em] text-[#011EF4]">Estado</h2>
             {error ? (
-              <p className="mt-4 border-l-4 border-red-600 bg-red-50 p-4 text-sm text-red-950">{error}</p>
+              <p className="mt-4 rounded-lg border-l-4 border-red-600 bg-red-50 p-4 text-sm text-red-950">{error}</p>
             ) : resultado ? (
               <div className="mt-4 space-y-5">
                 <div>
-                  <div className="text-6xl font-black text-[#011EF4]">
+                  <div className="text-6xl font-black leading-none text-[#011EF4]">
                     {resultado.resultado.puntaje_cumplimiento}
                   </div>
-                  <p className="text-sm font-semibold text-[#6F7072]">Puntaje de cumplimiento</p>
+                  <p className="mt-1 text-xs font-semibold uppercase tracking-wider text-[#6F7072]">
+                    Puntaje de cumplimiento
+                  </p>
                 </div>
                 <p className="text-sm leading-6 text-[#374151]">{resultado.resultado.resumen_ejecutivo}</p>
                 <button
                   type="button"
                   onClick={descargarReportePdf}
                   disabled={descargandoPdf}
-                  className="min-h-12 w-full bg-[#011EF4] px-4 text-sm font-black uppercase tracking-wide text-white transition hover:bg-[#0015a8] disabled:cursor-wait disabled:opacity-70"
+                  className="min-h-12 w-full rounded-xl bg-[#011EF4] px-4 text-sm font-black uppercase tracking-wide text-white shadow-sm transition hover:bg-[#0015a8] hover:shadow disabled:cursor-wait disabled:opacity-70"
                 >
-                  {descargandoPdf ? "Generando PDF" : "Descargar reporte PDF"}
+                  {descargandoPdf ? "Generando PDF…" : "Descargar reporte PDF"}
                 </button>
               </div>
             ) : (
               <p className="mt-4 text-sm leading-6 text-[#6F7072]">
-                Ingresa una URL publica para iniciar la auditoria automatizada.
+                Ingresa una URL pública para iniciar la auditoría automatizada.
               </p>
             )}
           </div>
 
           {resultado && (
-            <div className="border border-[#dfe3ef] bg-white p-5">
-              <h2 className="text-sm font-black uppercase tracking-wide text-[#011EF4]">Evidencia</h2>
+            <div className="rounded-2xl border border-[#dfe3ef] bg-white p-6 shadow-sm">
+              <h2 className="text-xs font-black uppercase tracking-[0.18em] text-[#011EF4]">Evidencia</h2>
               <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
-                <div className="bg-[#f4f6fb] p-3">
-                  <dt className="text-[#6F7072]">Politica</dt>
-                  <dd className="font-bold">{resultado.evidencia.politica_privacidad.encontrada ? "Detectada" : "No detectada"}</dd>
+                <div className="rounded-lg bg-[#f4f6fb] p-3">
+                  <dt className="text-xs text-[#6F7072]">Política</dt>
+                  <dd className="mt-0.5 font-bold">{resultado.evidencia.politica_privacidad.encontrada ? "Detectada" : "No detectada"}</dd>
                 </div>
-                <div className="bg-[#f4f6fb] p-3">
-                  <dt className="text-[#6F7072]">Formularios</dt>
-                  <dd className="font-bold">{resultado.evidencia.formularios.length}</dd>
+                <div className="rounded-lg bg-[#f4f6fb] p-3">
+                  <dt className="text-xs text-[#6F7072]">Formularios</dt>
+                  <dd className="mt-0.5 font-bold">{resultado.evidencia.formularios.length}</dd>
                 </div>
-                <div className="bg-[#f4f6fb] p-3">
-                  <dt className="text-[#6F7072]">Cookies</dt>
-                  <dd className="font-bold">{resultado.evidencia.cookies_banner.encontrado ? "Detectado" : "No detectado"}</dd>
+                <div className="rounded-lg bg-[#f4f6fb] p-3">
+                  <dt className="text-xs text-[#6F7072]">Cookies</dt>
+                  <dd className="mt-0.5 font-bold">{resultado.evidencia.cookies_banner.encontrado ? "Detectado" : "No detectado"}</dd>
                 </div>
-                <div className="bg-[#f4f6fb] p-3">
-                  <dt className="text-[#6F7072]">Art. 18</dt>
-                  <dd className="font-bold">{resultado.resultado.elementos_faltantes_art18} faltantes</dd>
+                <div className="rounded-lg bg-[#f4f6fb] p-3">
+                  <dt className="text-xs text-[#6F7072]">Art. 18</dt>
+                  <dd className="mt-0.5 font-bold">{resultado.resultado.elementos_faltantes_art18} faltantes</dd>
                 </div>
               </dl>
             </div>
@@ -213,8 +232,8 @@ export default function Home() {
         <div className="space-y-6">
           {resultado && (
             <>
-              <section className="border border-[#dfe3ef] bg-white p-5">
-                <h2 className="text-sm font-black uppercase tracking-wide text-[#011EF4]">Estado por elemento del Art. 18 Ley 29733</h2>
+              <section className="rounded-2xl border border-[#dfe3ef] bg-white p-6 shadow-sm">
+                <h2 className="text-xs font-black uppercase tracking-[0.18em] text-[#011EF4]">Estado por elemento del Art. 18 Ley 29733</h2>
                 <p className="mt-2 text-xs text-[#6F7072]">Resumen at-a-glance del cumplimiento por cada deber de informar.</p>
                 <table className="mt-4 w-full text-xs">
                   <thead>
@@ -250,8 +269,8 @@ export default function Home() {
                 </table>
               </section>
 
-              <section className="border border-[#dfe3ef] bg-white p-5">
-                <h2 className="text-sm font-black uppercase tracking-wide text-[#011EF4]">Metodología de calificación</h2>
+              <section className="rounded-2xl border border-[#dfe3ef] bg-white p-6 shadow-sm">
+                <h2 className="text-xs font-black uppercase tracking-[0.18em] text-[#011EF4]">Metodología de calificación</h2>
                 <p className="mt-3 border-l-4 border-[#011EF4] bg-[#f4f6fb] p-3 font-mono text-xs text-[#111827]">
                   {resultado.resultado.metodologia_calificacion.formula_texto}
                 </p>
@@ -295,9 +314,9 @@ export default function Home() {
                 </p>
               </section>
 
-              <section className="border border-[#dfe3ef] bg-white p-5">
+              <section className="rounded-2xl border border-[#dfe3ef] bg-white p-6 shadow-sm">
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <h2 className="text-sm font-black uppercase tracking-wide text-[#011EF4]">Observaciones</h2>
+                  <h2 className="text-xs font-black uppercase tracking-[0.18em] text-[#011EF4]">Observaciones</h2>
                   <div className="flex flex-wrap gap-2">
                     {Object.entries(conteo).map(([severidad, cantidad]) => (
                       <span key={severidad} className={`px-3 py-1 text-xs font-bold ${severidadColor[severidad] ?? "bg-zinc-100"}`}>
@@ -309,15 +328,15 @@ export default function Home() {
 
                 <div className="mt-5 space-y-4">
                   {observaciones.map((observacion) => (
-                    <article key={observacion.id} className="border border-[#e6e9f2] p-4">
+                    <article key={observacion.id} className="rounded-xl border border-[#e6e9f2] p-5 transition hover:border-[#d4d9e6]">
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div>
                           <p className="text-xs font-bold uppercase tracking-wide text-[#6F7072]">
-                            {observacion.id} / Modulo {observacion.modulo}
+                            {observacion.id} · Módulo {observacion.modulo}
                           </p>
-                          <h3 className="mt-1 text-lg font-black">{observacion.categoria}</h3>
+                          <h3 className="mt-1 text-lg font-black leading-tight">{observacion.categoria}</h3>
                         </div>
-                        <span className={`px-3 py-1 text-xs font-black ${severidadColor[observacion.severidad] ?? "bg-zinc-100"}`}>
+                        <span className={`rounded-full px-3 py-1 text-xs font-black ${severidadColor[observacion.severidad] ?? "bg-zinc-100"}`}>
                           {observacion.severidad}
                         </span>
                       </div>
@@ -338,8 +357,8 @@ export default function Home() {
               </section>
 
               <section className="grid gap-6 md:grid-cols-2">
-                <div className="border border-[#dfe3ef] bg-white p-5">
-                  <h2 className="text-sm font-black uppercase tracking-wide text-[#011EF4]">Elementos cumplidos</h2>
+                <div className="rounded-2xl border border-[#dfe3ef] bg-white p-6 shadow-sm">
+                  <h2 className="text-xs font-black uppercase tracking-[0.18em] text-[#011EF4]">Elementos cumplidos</h2>
                   <ul className="mt-4 space-y-3 text-sm leading-6 text-[#374151]">
                     {resultado.resultado.elementos_cumplidos.map((item, idx) => (
                       <li key={idx} className="border-l-4 border-[#1f9d55] pl-3">
@@ -350,8 +369,8 @@ export default function Home() {
                     ))}
                   </ul>
                 </div>
-                <div className="border border-[#dfe3ef] bg-white p-5">
-                  <h2 className="text-sm font-black uppercase tracking-wide text-[#011EF4]">Trackers detectados</h2>
+                <div className="rounded-2xl border border-[#dfe3ef] bg-white p-6 shadow-sm">
+                  <h2 className="text-xs font-black uppercase tracking-[0.18em] text-[#011EF4]">Trackers detectados</h2>
                   <ul className="mt-4 space-y-3 text-sm leading-6 text-[#374151]">
                     {resultado.resultado.trackers_detectados.length > 0 ? (
                       resultado.resultado.trackers_detectados.map((tracker) => (

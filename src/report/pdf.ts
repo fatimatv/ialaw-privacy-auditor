@@ -45,14 +45,11 @@ function renderDetalles(detalles?: string[]): string {
   `;
 }
 
-function renderNivelTecnico(_nivel?: string): string {
-  // El nivel del detector es un codigo tecnico interno
-  // (ej. "SIN_REVOCACION+SIN_REFERENCIA_ANPDP"); se omite del reporte
-  // publico por estar en formato de codigo, no en lenguaje juridico.
-  // Sigue disponible en el JSON crudo de la auditoria para auditoria
-  // tecnica si hace falta.
-  return "";
-}
+// El nivel del detector es un codigo tecnico interno
+// (ej. "SIN_REVOCACION+SIN_REFERENCIA_ANPDP"); se omite del reporte
+// publico por estar en formato de codigo, no en lenguaje juridico.
+// Sigue disponible en el JSON crudo de la auditoria para auditoria
+// tecnica si hace falta.
 
 export type LogosReporte = {
   /** Logo vertical para la portada del PDF. Acepta data: URI o URL absoluta. */
@@ -92,7 +89,6 @@ export function crearHtmlReporte(resultado: ResultadoAuditoria, logos: LogosRepo
           <p><strong>Base infraccion:</strong> ${escaparHtml(observacion.base_infraccion)}</p>
           ${renderRiesgo(observacion)}
           <p><strong>Recomendacion:</strong> ${escaparHtml(observacion.recomendacion)}</p>
-          ${renderNivelTecnico(observacion.nivel)}
         </article>
       `
     )
