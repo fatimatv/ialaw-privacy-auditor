@@ -8,10 +8,90 @@
 // (cheerio) + el analyzer para producir el ResultadoAuditoria final.
 // Aqui solo se hace lo que requiere un browser real.
 
+import { promises as dns } from "node:dns";
+import net from "node:net";
 import { chromium } from "playwright";
 
 const TEXTO_POLITICA =
   /(privacidad|protecci[oó]n de datos|datos personales|privacy)/i;
+
+// Defensa en profundidad SSRF: el route handler valida la URL inicial,
+// pero dentro del sandbox vamos a navegar a URLs descubiertas (sitemap,
+// links internos, politica). Cada una debe pasar la misma validacion:
+// no http(s) -> rechazar; hostnames internos -> rechazar; resolver DNS
+// y rechazar si cualquier registro apunta a IPv4 privada/reservada o
+// IPv6 loopback/link-local/ULA. Esta logica es un port directo de
+// src/crawler/url-guard.ts.
+const HOSTNAMES_BLOQUEADOS =
+  /^(localhost|.+\.localhost|.+\.local|.+\.internal|metadata\.google\.internal)$/i;
+
+function ipv4PrivadaOReservada(ip) {
+  if (!net.isIPv4(ip)) return false;
+  const [a, b] = ip.split(".").map(Number);
+  if (a === 0) return true;
+  if (a === 10) return true;
+  if (a === 127) return true;
+  if (a === 169 && b === 254) return true;
+  if (a === 172 && b >= 16 && b <= 31) return true;
+  if (a === 192 && b === 168) return true;
+  if (a === 100 && b >= 64 && b <= 127) return true;
+  if (a >= 224) return true;
+  return false;
+}
+
+function ipv6PrivadaOReservada(ip) {
+  if (!net.isIPv6(ip)) return false;
+  const norm = ip.toLowerCase();
+  if (norm === "::1" || norm === "::") return true;
+  if (/^f[cd][0-9a-f]{2}:/.test(norm)) return true;
+  if (/^fe[89ab][0-9a-f]:/.test(norm)) return true;
+  const v4Mapped = norm.match(/^::ffff:([0-9.]+)$/);
+  if (v4Mapped) return ipv4PrivadaOReservada(v4Mapped[1]);
+  return false;
+}
+
+function ipPrivadaOReservada(ip) {
+  return ipv4PrivadaOReservada(ip) || ipv6PrivadaOReservada(ip);
+}
+
+async function validarUrlPublica(urlEntrada) {
+  let parsed;
+  try {
+    parsed = new URL(urlEntrada);
+  } catch {
+    throw new Error("URL inválida.");
+  }
+  if (!["http:", "https:"].includes(parsed.protocol)) {
+    throw new Error("Solo se admiten URLs http o https.");
+  }
+  if (parsed.username || parsed.password) {
+    throw new Error("No se admiten URLs con credenciales embebidas.");
+  }
+  const hostname = parsed.hostname.toLowerCase();
+  if (!hostname) throw new Error("La URL no incluye un host.");
+  if (HOSTNAMES_BLOQUEADOS.test(hostname)) {
+    throw new Error("No se permiten hostnames internos o de loopback.");
+  }
+  if (net.isIP(hostname)) {
+    if (ipPrivadaOReservada(hostname)) {
+      throw new Error("La URL apunta a una IP interna o reservada.");
+    }
+    return parsed.toString();
+  }
+  let registros;
+  try {
+    registros = await dns.lookup(hostname, { all: true });
+  } catch {
+    throw new Error("No se pudo resolver el dominio.");
+  }
+  if (registros.length === 0) throw new Error("No se pudo resolver el dominio.");
+  for (const { address } of registros) {
+    if (ipPrivadaOReservada(address)) {
+      throw new Error("La URL resuelve a una IP interna o reservada.");
+    }
+  }
+  return parsed.toString();
+}
 
 const RUTAS_CON_FORMULARIOS =
   /(\/|^)(contact[oa]?|contact-us|register|registro|sign[-_]?up|signup|login|forgot[-_]?password|newsletter|suscri[bc][a-zñ]+|reserva[a-zñ]*|book[a-z]*|cotiza[a-zñ]*|presupuesto|solicitar|onboarding|alta|crear[-_]?cuenta)/i;
@@ -70,6 +150,11 @@ async function leerSitemap(browser, origen) {
     `${origen.origin}/sitemap_index.xml`,
   ];
   for (const sitemapUrl of candidatos) {
+    try {
+      await validarUrlPublica(sitemapUrl);
+    } catch {
+      continue;
+    }
     const page = await browser.newPage();
     try {
       const response = await page
@@ -204,6 +289,11 @@ async function main() {
 
     const paginas = [{ url, html: htmlHome }];
     for (const ruta of rutasAVisitar) {
+      try {
+        await validarUrlPublica(ruta);
+      } catch {
+        continue;
+      }
       const html = await abrirYExtraerHtml(browser, ruta);
       if (!html) continue;
       paginas.push({ url: ruta, html });
@@ -212,8 +302,15 @@ async function main() {
     let politicaTexto = "";
     let politicaUrl;
     if (politicaHref) {
-      politicaUrl = politicaHref;
-      politicaTexto = await obtenerTextoPolitica(browser, politicaHref);
+      try {
+        await validarUrlPublica(politicaHref);
+        politicaUrl = politicaHref;
+        politicaTexto = await obtenerTextoPolitica(browser, politicaHref);
+      } catch {
+        // politicaHref invalida o apunta a una IP interna: la dejamos
+        // afuera. El analyzer fallara con "no se encontro politica" que
+        // es el comportamiento correcto.
+      }
     }
 
     process.stdout.write(
