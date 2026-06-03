@@ -40,6 +40,7 @@ function resultadoBase(overrides: Partial<ResultadoAuditoria> = {}): ResultadoAu
     trackers_detectados: [],
     advertencias_metodologicas: [],
     metodologia_calificacion: metodologiaVacia(puntaje),
+    cuadro_art18: [],
     ...overrides,
   };
 }
@@ -161,6 +162,41 @@ describe("crearHtmlReporte", () => {
     // El codigo tecnico del nivel no debe aparecer en el PDF publico:
     // es un identificador interno en formato code-style, no espanol juridico.
     expect(html).not.toContain("SIN_REVOCACION+SIN_REFERENCIA_ANPDP");
+  });
+
+  it("renderiza el cuadro de estado por elemento del Art. 18", () => {
+    const html = crearHtmlReporte(
+      resultadoBase({
+        cuadro_art18: [
+          {
+            codigo: "A.2",
+            categoria: "Identidad y domicilio del responsable",
+            estado: "CUMPLE",
+            norma: "Art. 18 Ley 29733",
+            comentario: "Identificados",
+          },
+          {
+            codigo: "A.5",
+            categoria: "Banco de datos personales",
+            estado: "PARCIAL",
+            norma: "Art. 34 Ley 29733",
+            comentario: "Falta código RNPDP",
+          },
+          {
+            codigo: "A.9",
+            categoria: "Derechos ARCO y mecanismos de ejercicio",
+            estado: "INCUMPLE",
+            norma: "Art. 18-19 Ley 29733",
+            comentario: "ARCO no mencionados",
+          },
+        ],
+      }),
+    );
+    expect(html).toContain("Estado por elemento del Art. 18 Ley 29733");
+    expect(html).toContain("Identidad y domicilio del responsable");
+    expect(html).toContain("estado-CUMPLE");
+    expect(html).toContain("estado-PARCIAL");
+    expect(html).toContain("estado-INCUMPLE");
   });
 
   it("renderiza elementos cumplidos como tarjetas estructuradas", () => {

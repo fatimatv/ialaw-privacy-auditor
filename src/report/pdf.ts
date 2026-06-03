@@ -339,6 +339,43 @@ export function crearHtmlReporte(resultado: ResultadoAuditoria, logos: LogosRepo
         font-size: 11px;
         color: #111827;
       }
+      .cuadro-art18 table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 10px;
+        margin: 10px 0;
+      }
+      .cuadro-art18 th, .cuadro-art18 td {
+        text-align: left;
+        padding: 7px 8px;
+        border-bottom: 1px solid #dfe3ef;
+        vertical-align: top;
+      }
+      .cuadro-art18 thead th {
+        background: #f4f6fb;
+        color: #011EF4;
+        font-weight: 900;
+        text-transform: uppercase;
+        font-size: 9px;
+      }
+      .cuadro-art18 .codigo {
+        font-weight: 900;
+        color: #6F7072;
+        white-space: nowrap;
+      }
+      .estado-pill {
+        display: inline-block;
+        padding: 2px 7px;
+        border-radius: 9999px;
+        font-size: 9px;
+        font-weight: 900;
+        text-transform: uppercase;
+        white-space: nowrap;
+      }
+      .estado-CUMPLE { background: #d4edda; color: #0f5132; }
+      .estado-PARCIAL { background: #fff3cd; color: #664d03; }
+      .estado-INCUMPLE { background: #f8d7da; color: #842029; }
+      .estado-NO_VERIFICADO { background: #e2e3e5; color: #41464b; }
     </style>
   </head>
   <body>
@@ -366,6 +403,37 @@ export function crearHtmlReporte(resultado: ResultadoAuditoria, logos: LogosRepo
         <div class="metric"><span>Trackers detectados</span><strong>${escaparHtml(resultado.trackers_detectados.length)}</strong></div>
       </div>
       <p class="disclaimer">${DISCLAIMER_REPORTE}</p>
+    </section>
+
+    <section class="section cuadro-art18">
+      <h2>Estado por elemento del Art. 18 Ley 29733</h2>
+      <p>Resumen at-a-glance del cumplimiento por cada deber de informar exigido por el Art. 18 Ley N° 29733. Las observaciones e incumplimientos se detallan más abajo.</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Cód.</th>
+            <th>Elemento</th>
+            <th>Estado</th>
+            <th>Comentario</th>
+            <th>Norma</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${resultado.cuadro_art18
+            .map(
+              (e) => `
+                <tr>
+                  <td class="codigo">${escaparHtml(e.codigo)}</td>
+                  <td><strong>${escaparHtml(e.categoria)}</strong></td>
+                  <td><span class="estado-pill estado-${escaparHtml(e.estado)}">${escaparHtml(e.estado.replace("_", " "))}</span></td>
+                  <td>${escaparHtml(e.comentario)}</td>
+                  <td>${escaparHtml(e.norma)}</td>
+                </tr>
+              `,
+            )
+            .join("")}
+        </tbody>
+      </table>
     </section>
 
     <section class="section metodologia">

@@ -8,7 +8,9 @@ import type {
   CookiesBannerDetectado,
   DatosCrawler,
   DeduccionPuntaje,
+  ElementoArt18,
   ElementoCumplido,
+  EstadoElemento,
   FormularioDetectado,
   Observacion,
   PoliticaPrivacidadDetectada,
@@ -538,28 +540,50 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
       })
     }
 
-    // A.3 — Finalidad
-    // TODO(legal): el bloque original ramificaba sobre el nivel
-    // 'FINES_ADICIONALES_SIN_CONSENTIMIENTO_INDEPENDIENTE', pero
-    // det.finalidad() nunca lo retorna (los niveles reales son
-    // FINALIDAD_GENERICA, SIN_DISTINCION_FINALIDADES, SIN_MECANISMO_NEGATIVA,
-    // CONDICIONAMIENTO_ILICITO, CONSENTIMIENTO_EN_BLOQUE, AUSENCIA_TOTAL).
-    // Hoy siempre cae en el texto de 'ausencia/insuficiente'; revisar si
-    // se quiere diferenciar el hallazgo y la recomendacion por nivel.
+    // A.3 — Finalidad. Hallazgo y recomendacion se ajustan al nivel
+    // emitido por el detector para no contradecirse con los detalles:
+    // antes el header decia siempre "no declara finalidades" aunque
+    // el problema real fuera otro (finalidades adicionales sin
+    // distincion, sin mecanismo de negativa, etc.).
     const r_finalidad = detectores.finalidad
     if (!r_finalidad.cumple) {
       contadorElementosFaltantesArt18++
+      const nivelFin = r_finalidad.nivel || ''
+      let hallazgoFin: string
+      let recomendacionFin: string
+      if (nivelFin === 'AUSENCIA_TOTAL') {
+        hallazgoFin = 'La política no declara ninguna finalidad del tratamiento.'
+        recomendacionFin = 'Declarar de forma clara, explícita y lícita las finalidades para las que se tratan los datos.'
+      } else if (nivelFin.startsWith('FINALIDAD_GENERICA')) {
+        hallazgoFin = 'Las finalidades declaradas usan frases genéricas o expresiones imprecisas prohibidas por la Guía ANPDP §4.2.'
+        recomendacionFin = 'Reformular las finalidades de forma específica, evitando expresiones como "fines comerciales", "mejora de servicios" o "entre otras finalidades". Cada finalidad debe poder identificarse por sí sola.'
+      } else if (nivelFin.includes('CONSENTIMIENTO_EN_BLOQUE')) {
+        hallazgoFin = 'Se solicita consentimiento en bloque para finalidades principales y adicionales con una sola casilla — práctica prohibida por la Guía ANPDP §5.'
+        recomendacionFin = 'Separar las casillas de consentimiento por finalidad. El titular debe poder aceptar la finalidad principal sin verse obligado a aceptar las adicionales.'
+      } else if (nivelFin.includes('CONDICIONAMIENTO_ILICITO')) {
+        hallazgoFin = 'Se condiciona la prestación del servicio a la aceptación de finalidades adicionales no indispensables — práctica prohibida por el Art. 3.2 DS 016-2024-JUS.'
+        recomendacionFin = 'Eliminar el condicionamiento. El servicio principal debe poder prestarse aunque el titular rechace las finalidades adicionales (marketing, perfilamiento, etc.).'
+      } else if (nivelFin.includes('SIN_DISTINCION_FINALIDADES')) {
+        hallazgoFin = 'La política declara finalidades adicionales (marketing, publicidad, perfilamiento) sin distinguirlas de las finalidades principales o consustanciales al servicio.'
+        recomendacionFin = 'Identificar expresamente qué finalidades son principales y cuáles adicionales, e implementar un consentimiento independiente para cada finalidad adicional.'
+      } else if (nivelFin.includes('SIN_MECANISMO_NEGATIVA')) {
+        hallazgoFin = 'Las finalidades adicionales declaradas no cuentan con un mecanismo de negativa independiente disponible al titular.'
+        recomendacionFin = 'Implementar un mecanismo de oposición independiente para las finalidades adicionales (checkbox separado, opción "no acepto", botón de baja, etc.).'
+      } else {
+        hallazgoFin = 'La declaración de finalidades del tratamiento presenta uno o más problemas exigidos por la normativa. Revisar los detalles por sub-elemento.'
+        recomendacionFin = 'Revisar las finalidades declaradas a la luz del Art. 7 (principio de finalidad) y la Guía ANPDP §4.2.'
+      }
       observaciones.push({
         id: `OBS-${String(observaciones.length + 1).padStart(2, '0')}`,
         modulo: 'A',
         categoria: 'Finalidad del tratamiento',
         severidad: 'GRAVE',
-        hallazgo: 'La política no declara las finalidades del tratamiento.',
-        evidencia: 'AUSENTE o INSUFICIENTE en la política.',
-        norma_vulnerada: 'Art. 18 + Art. 7 (principio de finalidad) Ley 29733 + Art. 10.2 DS 016-2024-JUS',
+        hallazgo: hallazgoFin,
+        evidencia: nivelFin === 'AUSENCIA_TOTAL' ? 'AUSENTE en la política.' : 'INSUFICIENTE o INCORRECTA en la política.',
+        norma_vulnerada: 'Art. 7 (principio de finalidad) + Art. 18 Ley 29733 + Art. 10.2 DS 016-2024-JUS + Guía ANPDP sobre el Deber de Informar §4.2',
         riesgo_infraccion: 'grave',
         base_infraccion: 'Art. 133.3 DS 016-2024-JUS',
-        recomendacion: 'Declarar de forma clara, explícita y lícita las finalidades para las que se tratan los datos.'
+        recomendacion: recomendacionFin,
       })
     }
 
@@ -1039,6 +1063,116 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
     })
   }
 
+  // ── CUADRO DE ESTADO POR ELEMENTO DEL ART. 18 ──
+  // Vista at-a-glance: por cada elemento del Art. 18 Ley 29733, su
+  // estado (cumple / parcial / incumple / no verificado) + norma + un
+  // comentario corto. Si no hay politica, todos los elementos quedan
+  // como INCUMPLE porque la ausencia total impide verificarlos.
+  function estado(d: { cumple?: boolean | 'PARCIAL' } | undefined): EstadoElemento {
+    if (!hayPolitica) return 'INCUMPLE'
+    if (!d) return 'NO_VERIFICADO'
+    if (d.cumple === true) return 'CUMPLE'
+    if (d.cumple === 'PARCIAL') return 'PARCIAL'
+    return 'INCUMPLE'
+  }
+  function comentarioObsOCumplido(categoria: string, descCumple: string): string {
+    const obs = observaciones.find((o) => o.categoria === categoria)
+    if (obs) {
+      // Toma el detalle mas especifico (el primero), si lo hay; sino el hallazgo.
+      const det = obs.detalles?.[0]
+      if (det) return det.split('(')[0].trim().slice(0, 200)
+      return obs.hallazgo.slice(0, 200)
+    }
+    return descCumple
+  }
+  const hayPolitica = Boolean(politica_privacidad?.encontrada) && texto.length >= 100
+  const cuadroArt18: ElementoArt18[] = [
+    {
+      codigo: 'A.2',
+      categoria: 'Identidad y domicilio del responsable',
+      estado: estado(detectores.identidad),
+      norma: 'Art. 18 Ley 29733 + Art. 6.1.1 DS 016-2024-JUS + Guía ANPDP §4.1',
+      comentario: comentarioObsOCumplido('Identidad y domicilio del responsable', 'Razón social/denominación, RUC y domicilio completo identificados.'),
+    },
+    {
+      codigo: 'A.3',
+      categoria: 'Finalidad del tratamiento',
+      estado: estado(detectores.finalidad),
+      norma: 'Art. 7 + Art. 18 Ley 29733 + Art. 10.2 DS 016-2024-JUS + Guía ANPDP §4.2',
+      comentario: comentarioObsOCumplido('Finalidad del tratamiento', 'Finalidades declaradas de forma específica y lícita.'),
+    },
+    {
+      codigo: 'A.4',
+      categoria: 'Destinatarios de los datos',
+      estado: estado(detectores.destinatarios),
+      norma: 'Art. 18 Ley 29733 + Art. 6.1.3 DS 016-2024-JUS + Guía ANPDP §4.3',
+      comentario: comentarioObsOCumplido('Destinatarios de los datos', 'Destinatarios identificados (o expresamente declarado que no hay transferencia).'),
+    },
+    {
+      codigo: 'A.4b',
+      categoria: 'Transferencia internacional de datos',
+      estado: estado(detectores.transferencia),
+      norma: 'Art. 15 Ley 29733 + Art. 6.1.7 DS 016-2024-JUS',
+      comentario: comentarioObsOCumplido('Transferencia internacional de datos', 'Sin transferencia internacional detectada, o declarada con país + nivel de protección.'),
+    },
+    {
+      codigo: 'A.5',
+      categoria: 'Banco de datos personales',
+      estado: estado(detectores.bancoDatos),
+      norma: 'Art. 18 + Art. 29 + Art. 34 Ley 29733 + Art. 6.1.4 DS 016-2024-JUS + Guía ANPDP §4.4',
+      comentario: comentarioObsOCumplido('Banco de datos personales', 'Banco de datos identificado con código RNPDP.'),
+    },
+    {
+      codigo: 'A.6',
+      categoria: 'Carácter obligatorio o facultativo de los datos',
+      estado: estado(detectores.obligatoriedad),
+      norma: 'Art. 18 Ley 29733 + Guía ANPDP §4.3',
+      comentario: comentarioObsOCumplido('Carácter obligatorio o facultativo de los datos', 'La política distingue datos obligatorios de facultativos.'),
+    },
+    {
+      codigo: 'A.7',
+      categoria: 'Consecuencias de proporcionar o negar los datos',
+      estado: estado(detectores.consecuencias),
+      norma: 'Art. 18 Ley 29733 + Art. 6.1.6 DS 016-2024-JUS + Guía ANPDP §4.4',
+      comentario: comentarioObsOCumplido('Consecuencias de proporcionar o negar los datos', 'Se informan las consecuencias de proporcionar o no los datos.'),
+    },
+    {
+      codigo: 'A.8',
+      categoria: 'Plazo de conservación de datos',
+      estado: estado(detectores.plazo),
+      norma: 'Art. 8 + Art. 18 Ley 29733 + Art. 6.1.9 DS 016-2024-JUS + Guía ANPDP §4.6',
+      comentario: comentarioObsOCumplido('Plazo de conservación de datos', 'Plazo determinado o criterio determinable indicado.'),
+    },
+    {
+      codigo: 'A.9',
+      categoria: 'Derechos ARCO y mecanismos de ejercicio',
+      estado: estado(detectores.arco),
+      norma: 'Arts. 18-25 Ley 29733 + Art. 6.1.10 DS 016-2024-JUS + Guía ANPDP §4.7',
+      comentario: comentarioObsOCumplido('Derechos ARCO y mecanismos de ejercicio', 'Derechos ARCO declarados con canal de ejercicio, revocación y mención a la ANPDP.'),
+    },
+    {
+      codigo: 'A.10',
+      categoria: 'Decisiones automatizadas y perfilamiento',
+      estado: estado(detectores.automatizadas),
+      norma: 'Art. 6.1.8 DS 016-2024-JUS',
+      comentario: comentarioObsOCumplido('Decisiones automatizadas y perfilamiento', 'Sin perfilamiento detectado, o informado al titular.'),
+    },
+    {
+      codigo: 'A.11',
+      categoria: 'Calidad del lenguaje y forma',
+      estado: estado(detectores.lenguaje),
+      norma: 'Art. 5 DS 016-2024-JUS + Guía ANPDP §5',
+      comentario: comentarioObsOCumplido('Calidad del lenguaje y forma', 'Lenguaje claro, sin transcripciones legales literales ni consentimiento por conducta implícita.'),
+    },
+    {
+      codigo: 'A.12',
+      categoria: 'Vigencia normativa',
+      estado: estado(detectores.reglamento),
+      norma: 'Ley 29733 + DS 016-2024-JUS (vigente; reemplazó al DS 003-2013-JUS derogado)',
+      comentario: comentarioObsOCumplido('Vigencia normativa', 'La política referencia la normativa peruana vigente.'),
+    },
+  ]
+
   return {
     sitio: url_auditada,
     fecha_auditoria: new Date().toISOString(),
@@ -1057,5 +1191,6 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
       'La coherencia entre política declarada y prácticas internas requiere auditoría documental adicional.'
     ],
     metodologia_calificacion,
+    cuadro_art18: cuadroArt18,
   }
 }

@@ -88,6 +88,18 @@ export type CalculoPuntaje = {
   clasificacion_deber_informar: ClasificacionDeberInformar;
 };
 
+export type EstadoElemento = "CUMPLE" | "PARCIAL" | "INCUMPLE" | "NO_VERIFICADO";
+
+export type ElementoArt18 = {
+  /** Identificador del subitem dentro del modulo A (ej. "A.2"). */
+  codigo: string;
+  categoria: string;
+  estado: EstadoElemento;
+  norma: string;
+  /** Resumen breve en una linea: que se detecto o que falta. */
+  comentario: string;
+};
+
 export type ResultadoAuditoria = {
   sitio: string;
   fecha_auditoria: string;
@@ -101,4 +113,6 @@ export type ResultadoAuditoria = {
   trackers_detectados: string[];
   advertencias_metodologicas: string[];
   metodologia_calificacion: CalculoPuntaje;
+  /** Cuadro al vuelo de cada elemento del Art. 18 con su estado. Resumen at-a-glance. */
+  cuadro_art18: ElementoArt18[];
 };

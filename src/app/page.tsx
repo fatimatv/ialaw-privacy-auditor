@@ -214,6 +214,43 @@ export default function Home() {
           {resultado && (
             <>
               <section className="border border-[#dfe3ef] bg-white p-5">
+                <h2 className="text-sm font-black uppercase tracking-wide text-[#011EF4]">Estado por elemento del Art. 18 Ley 29733</h2>
+                <p className="mt-2 text-xs text-[#6F7072]">Resumen at-a-glance del cumplimiento por cada deber de informar.</p>
+                <table className="mt-4 w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-[#dfe3ef] text-left uppercase text-[#011EF4]">
+                      <th className="py-2 pr-2 font-black">Cód.</th>
+                      <th className="py-2 pr-2 font-black">Elemento</th>
+                      <th className="py-2 pr-2 font-black">Estado</th>
+                      <th className="py-2 pr-2 font-black">Comentario</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {resultado.resultado.cuadro_art18.map((e) => {
+                      const colorByEstado: Record<string, string> = {
+                        CUMPLE: "bg-green-100 text-green-900",
+                        PARCIAL: "bg-amber-100 text-amber-900",
+                        INCUMPLE: "bg-red-100 text-red-900",
+                        NO_VERIFICADO: "bg-zinc-100 text-zinc-700",
+                      };
+                      return (
+                        <tr key={e.codigo} className="border-b border-[#e6e9f2] align-top">
+                          <td className="py-2 pr-2 font-mono text-[#6F7072]">{e.codigo}</td>
+                          <td className="py-2 pr-2 font-bold">{e.categoria}</td>
+                          <td className="py-2 pr-2">
+                            <span className={`inline-block px-2 py-0.5 text-[10px] font-black uppercase ${colorByEstado[e.estado] ?? "bg-zinc-100"}`}>
+                              {e.estado.replace("_", " ")}
+                            </span>
+                          </td>
+                          <td className="py-2 pr-2 text-[#374151]">{e.comentario}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </section>
+
+              <section className="border border-[#dfe3ef] bg-white p-5">
                 <h2 className="text-sm font-black uppercase tracking-wide text-[#011EF4]">Metodología de calificación</h2>
                 <p className="mt-3 border-l-4 border-[#011EF4] bg-[#f4f6fb] p-3 font-mono text-xs text-[#111827]">
                   {resultado.resultado.metodologia_calificacion.formula_texto}
