@@ -98,8 +98,9 @@ const det = {
     const tieneRepresentante = /(representante en perú|representante legal en perú|delegado en perú)/i.test(t)
     const resultado: ResultadoDetector = { cumple: true, detalles: [] }
 
-    if (!tieneNombre) {
-      resultado.cumple = false
+    const faltaNombre = !tieneNombre
+    const faltaDomicilio = !tieneDomicilioCompleto
+    if (faltaNombre) {
       resultado.nivel = 'SIN_RAZON_SOCIAL'
       resultado.detalles?.push('No se identifica la razón social o denominación del responsable (Art. 18 párr. 1 Ley 29733 + Art. 6.1.1 DS 016-2024-JUS + Guía ANPDP sobre el Deber de Informar §4.1).')
     }
@@ -107,15 +108,19 @@ const det = {
       resultado.alerta_ruc = true
       resultado.detalles?.push('No se indica el RUC (recomendado por Guía ANPDP §4.1)')
     }
-    if (!tieneDomicilioCompleto) {
-      resultado.cumple = false
-      resultado.nivel = resultado.nivel || 'DOMICILIO_INCOMPLETO'
+    if (faltaDomicilio) {
+      resultado.nivel = resultado.nivel ? `${resultado.nivel}+DOMICILIO_INCOMPLETO` : 'DOMICILIO_INCOMPLETO'
       resultado.detalles?.push('El domicilio no incluye los componentes mínimos: vía (calle/av/jr) o frase introductoria de domicilio + número y distrito/provincia (Art. 18 Ley 29733 + Art. 6.1.1 DS 016-2024-JUS + Guía ANPDP sobre el Deber de Informar §4.1).')
     }
     if (pareceExtranjero && !tieneRepresentante) {
       resultado.alerta_representante = true
       resultado.detalles?.push('El responsable podría no estar establecido en Perú sin designar representante (Art. 7 DS 016-2024-JUS)')
     }
+    // Si falta el NOMBRE -> incumple total (falta el dato esencial del responsable).
+    // Si el nombre esta y solo falta el domicilio completo -> PARCIAL (la
+    // politica identifica al responsable pero su direccion es deficiente).
+    if (faltaNombre) resultado.cumple = false
+    else if (faltaDomicilio) resultado.cumple = 'PARCIAL'
     return resultado
   },
 
@@ -138,9 +143,14 @@ const det = {
       /entre\s+otros\s+usos/i,
       /y\s+otros\s+fines\s+similares/i,
     ]
+    // Acumulamos niveles. Al final decidimos si es PARCIAL (hay finalidades
+    // pero con deficiencias salvables) o FALSE (practica prohibida o
+    // ausencia). Niveles "soft" -> PARCIAL; "hard" -> false.
+    let hayHard = false
+    let haySoft = false
     const frasesEncontradas = frasesGenericas.filter(r => r.test(t))
     if (frasesEncontradas.length > 0) {
-      resultado.cumple = false
+      haySoft = true
       resultado.nivel = 'FINALIDAD_GENERICA'
       resultado.detalles?.push('Se usan frases genéricas o inexactas prohibidas por la Guía ANPDP §4.2: "entre otras finalidades", "etcétera", "fines comerciales", u otras expresiones vagas')
     }
@@ -148,7 +158,7 @@ const det = {
     const tieneFinAdic = /(publicidad|marketing|comercial|perfilamiento|prospección|comunicaciones comerciales|envío.*promocion)/i.test(t)
     const distingueFinalidades = /(finalidad.*principal|finalidad.*primaria|finalidad.*consustancial|necesaria.*para el servicio|adicional|secundaria|finalidad.*opcional)/i.test(t)
     if (tieneFinAdic && !distingueFinalidades) {
-      resultado.cumple = false
+      haySoft = true
       resultado.nivel = resultado.nivel || 'SIN_DISTINCION_FINALIDADES'
       resultado.detalles?.push('Se declaran finalidades adicionales (marketing/publicidad) sin distinguirlas de las finalidades principales/consustanciales al servicio (Guía ANPDP §4.2)')
     }
@@ -158,7 +168,7 @@ const det = {
       const tieneConsentimientoIndep = /(checkbox|casilla|marcar|seleccionar).*?(publicidad|marketing|comercial)/i.test(t)
 
       if (!tieneMecanismoNegativa && !tieneConsentimientoIndep) {
-        resultado.cumple = false
+        haySoft = true
         resultado.nivel = resultado.nivel || 'SIN_MECANISMO_NEGATIVA'
         resultado.detalles?.push('Las finalidades adicionales no cuentan con mecanismo de negativa independiente disponible para el titular (Guía ANPDP §4.2 + Art. 10.2 DS 016-2024-JUS)')
       }
@@ -179,7 +189,7 @@ const det = {
         return hayCondicional && hayAceptar && hayMarketing
       })
       if (condicionaServicio) {
-        resultado.cumple = false
+        hayHard = true
         resultado.nivel = 'CONDICIONAMIENTO_ILICITO'
         resultado.detalles?.push('Se condiciona la prestación del servicio a la aceptación de finalidades adicionales (marketing/publicidad) no indispensables — práctica prohibida por el Art. 3.2 DS 016-2024-JUS.')
       }
@@ -187,11 +197,15 @@ const det = {
 
     const checkboxUnico = /(acepto\s+la\s+política\s+de\s+privacidad|he\s+leído\s+y\s+acepto|acepto\s+los\s+términos).*?(publicidad|marketing|comunicaciones comerciales)/i.test(t)
     if (checkboxUnico) {
-      resultado.cumple = false
+      hayHard = true
       resultado.nivel = 'CONSENTIMIENTO_EN_BLOQUE'
       resultado.detalles?.push('Se solicita consentimiento en bloque para finalidades principales y adicionales con una sola casilla — práctica expresamente prohibida por la Guía ANPDP §5')
     }
 
+    // Hard: practica prohibida o ausencia -> cumple: false (peso completo).
+    // Soft: hay finalidades declaradas pero deficientes -> cumple: 'PARCIAL'.
+    if (hayHard) resultado.cumple = false
+    else if (haySoft) resultado.cumple = 'PARCIAL'
     return resultado
   },
 
@@ -333,7 +347,10 @@ const det = {
     const esVago = plazosVagos.some(r => r.test(t))
     const plazoDeterminado = /(\d+\s*(año|mes|día|semana)|mientras\s+dure\s+la\s+relaci[oó]n|hasta\s+que\s+revoque|durante\s+la\s+vigencia\s+del\s+contrato|hasta\s+que\s+solicite\s+su\s+cancelaci[oó]n)/i.test(t)
     if (!tieneAlgoPlazo) return { cumple: false, nivel: 'AUSENCIA', detalles: ['La política no incluye el plazo de conservación de los datos (Art. 18 Ley 29733 + Art. 6.1.9 DS 016-2024-JUS)'] }
-    if (esVago && !plazoDeterminado) return { cumple: false, nivel: 'PLAZO_INDETERMINADO', detalles: ['El plazo de conservación es vago e indeterminado. La normativa exige plazo determinado o, al menos, criterio determinable (Art. 8 — principio de calidad + Art. 18 Ley 29733 + Art. 6.1.9 DS 016-2024-JUS + Guía ANPDP sobre el Deber de Informar §4.6).'] }
+    // El plazo VAGO se trata como PARCIAL: la politica menciona un plazo
+    // pero deficientemente. La ausencia total se mantiene como incumple
+    // total porque ahi falta el elemento por completo.
+    if (esVago && !plazoDeterminado) return { cumple: 'PARCIAL', nivel: 'PLAZO_INDETERMINADO', detalles: ['El plazo de conservación es vago e indeterminado. La normativa exige plazo determinado o, al menos, criterio determinable (Art. 8 — principio de calidad + Art. 18 Ley 29733 + Art. 6.1.9 DS 016-2024-JUS + Guía ANPDP sobre el Deber de Informar §4.6).'] }
     return { cumple: true }
   },
 
@@ -347,13 +364,11 @@ const det = {
     const tieneFormulario = /(formulario|form|portal|plataforma|sistema)\s+(de\s+)?(solicitud|ARCO|derechos)/i.test(t)
     const tieneCanal = tieneEmail || tieneDireccionFisica || tieneFormulario
     if (!tieneCanal) {
-      resultado.cumple = false
       resultado.faltantes?.push('SIN_CANAL_VERIFICABLE')
       resultado.detalles?.push('No se indica un canal concreto y verificable para ejercer los derechos ARCO — correo electrónico, dirección física o formulario (Art. 19 Ley 29733 — derecho a contactar al responsable + Art. 6.1.10 DS 016-2024-JUS + Guía ANPDP sobre el Deber de Informar §4.7).')
     }
     const mencionaRevocacion = /(revocar|revocaci[oó]n|retirar.*consentimiento|dejar\s+de\s+autorizar|cancelar.*consentimiento)/i.test(t)
     if (!mencionaRevocacion) {
-      resultado.cumple = false
       resultado.faltantes?.push('SIN_REVOCACION')
       resultado.detalles?.push('No se informa sobre el derecho de revocación del consentimiento en cualquier momento (Art. 10 DS 016-2024-JUS)')
     }
@@ -362,8 +377,13 @@ const det = {
       resultado.faltantes?.push('SIN_REFERENCIA_ANPDP')
       resultado.detalles?.push('No se menciona a la Autoridad Nacional de Protección de Datos Personales — ANPDP como autoridad ante la que el titular puede ejercer su derecho de tutela (Art. 24 Ley 29733 — derecho de tutela + Guía ANPDP sobre el Deber de Informar §4.7).')
     }
-    if ((resultado.faltantes?.length || 0) > 0 && !resultado.nivel) {
-      resultado.nivel = resultado.faltantes?.join('+')
+    // Si la politica MENCIONA los derechos ARCO pero faltan uno o mas
+    // sub-elementos, es cumplimiento PARCIAL. Solo es incumplimiento
+    // total cuando la politica no menciona los derechos en absoluto
+    // (rama AUSENCIA_TOTAL arriba).
+    if ((resultado.faltantes?.length || 0) > 0) {
+      resultado.cumple = 'PARCIAL'
+      if (!resultado.nivel) resultado.nivel = resultado.faltantes?.join('+')
     }
     return resultado
   },
@@ -616,23 +636,26 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
 
     // A.2 — Identidad y domicilio
     const r_identidad = detectores.identidad
-    if (!r_identidad.cumple) {
-      contadorElementosFaltantesArt18++
+    if (!r_identidad.cumple || r_identidad.cumple === 'PARCIAL') {
+      if (!r_identidad.cumple) contadorElementosFaltantesArt18++
+      const esParcialIdentidad = r_identidad.cumple === 'PARCIAL'
       observaciones.push({
         id: `OBS-${String(observaciones.length + 1).padStart(2, '0')}`,
         modulo: 'A',
         categoria: 'Identidad y domicilio del responsable',
-        severidad: 'IMPORTANTE',
+        severidad: esParcialIdentidad ? 'MODERADA' : 'IMPORTANTE',
         hallazgo: r_identidad.nivel === 'AUSENCIA_TOTAL'
           ? 'No se identifica al titular del banco de datos ni su domicilio.'
           : r_identidad.nivel === 'SIN_RAZON_SOCIAL' || r_identidad.nivel === 'SIN_NOMBRE'
             ? 'La política no identifica claramente la razón social del responsable del tratamiento.'
-            : 'La política no indica el domicilio o dirección del responsable del tratamiento.',
-        evidencia: 'AUSENTE en el texto de la política.',
-        norma_vulnerada: 'Art. 18 Ley 29733 + Art. 6.1.1 DS 016-2024-JUS',
+            : 'La política identifica al responsable pero su domicilio está incompleto (falta vía, número o distrito).',
+        evidencia: esParcialIdentidad ? 'Identificación PARCIAL en la política.' : 'AUSENTE en el texto de la política.',
+        norma_vulnerada: 'Art. 18 Ley 29733 + Art. 6.1.1 DS 016-2024-JUS + Guía ANPDP §4.1',
         riesgo_infraccion: 'leve/grave (según total de elementos faltantes)',
         base_infraccion: 'Art. 132.5 o 133.2 DS 016-2024-JUS',
-        recomendacion: 'Incluir nombre o razón social completa y dirección física del responsable del tratamiento.'
+        recomendacion: esParcialIdentidad
+          ? 'Completar la dirección con vía (Av./Calle/Jr./etc.), número y distrito/provincia.'
+          : 'Incluir nombre o razón social completa y dirección física del responsable del tratamiento.'
       })
     }
 
@@ -642,8 +665,9 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
     // el problema real fuera otro (finalidades adicionales sin
     // distincion, sin mecanismo de negativa, etc.).
     const r_finalidad = detectores.finalidad
-    if (!r_finalidad.cumple) {
-      contadorElementosFaltantesArt18++
+    if (!r_finalidad.cumple || r_finalidad.cumple === 'PARCIAL') {
+      if (!r_finalidad.cumple) contadorElementosFaltantesArt18++
+      const esParcialFinalidad = r_finalidad.cumple === 'PARCIAL'
       const nivelFin = r_finalidad.nivel || ''
       let hallazgoFin: string
       let recomendacionFin: string
@@ -669,16 +693,22 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
         hallazgoFin = 'La declaración de finalidades del tratamiento presenta uno o más problemas exigidos por la normativa. Revisar los detalles por sub-elemento.'
         recomendacionFin = 'Revisar las finalidades declaradas a la luz del Art. 7 (principio de finalidad) y la Guía ANPDP §4.2.'
       }
+      // Niveles "hard" (ausencia total, condicionamiento ilicito o
+      // consentimiento en bloque): practicas prohibidas o ausencia
+      // completa → GRAVE. Niveles "soft" (finalidad generica, sin
+      // distincion, sin mecanismo de negativa): la politica DECLARA
+      // finalidades pero con deficiencias subsanables → IMPORTANTE.
+      const severidadFin: 'GRAVE' | 'IMPORTANTE' = esParcialFinalidad ? 'IMPORTANTE' : 'GRAVE'
       observaciones.push({
         id: `OBS-${String(observaciones.length + 1).padStart(2, '0')}`,
         modulo: 'A',
         categoria: 'Finalidad del tratamiento',
-        severidad: 'GRAVE',
+        severidad: severidadFin,
         hallazgo: hallazgoFin,
         evidencia: nivelFin === 'AUSENCIA_TOTAL' ? 'AUSENTE en la política.' : 'INSUFICIENTE o INCORRECTA en la política.',
         norma_vulnerada: 'Art. 7 (principio de finalidad) + Art. 18 Ley 29733 + Art. 10.2 DS 016-2024-JUS + Guía ANPDP sobre el Deber de Informar §4.2',
-        riesgo_infraccion: 'grave',
-        base_infraccion: 'Art. 133.3 DS 016-2024-JUS',
+        riesgo_infraccion: severidadFin === 'GRAVE' ? 'grave' : 'leve',
+        base_infraccion: severidadFin === 'GRAVE' ? 'Art. 133.3 DS 016-2024-JUS' : 'Art. 132.5 DS 016-2024-JUS',
         recomendacion: recomendacionFin,
       })
     }
@@ -804,17 +834,18 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
 
     // A.8 — Plazo de conservación
     const r_plazo = detectores.plazo
-    if (!r_plazo.cumple) {
-      contadorElementosFaltantesArt18++
+    if (!r_plazo.cumple || r_plazo.cumple === 'PARCIAL') {
+      if (!r_plazo.cumple) contadorElementosFaltantesArt18++
+      const esParcialPlazo = r_plazo.cumple === 'PARCIAL'
       observaciones.push({
         id: `OBS-${String(observaciones.length + 1).padStart(2, '0')}`,
         modulo: 'A',
         categoria: 'Plazo de conservación de datos',
-        severidad: 'IMPORTANTE',
+        severidad: esParcialPlazo ? 'MODERADA' : 'IMPORTANTE',
         hallazgo: r_plazo.nivel === 'PLAZO_INDETERMINADO'
           ? 'El plazo de conservación declarado es vago e indeterminado ("el tiempo necesario") sin criterio claro que lo delimite.'
           : 'La política no informa el plazo o criterio de conservación de los datos personales.',
-        evidencia: 'AUSENTE o INDETERMINADO en la política.',
+        evidencia: esParcialPlazo ? 'PARCIAL: plazo mencionado de forma indeterminada.' : 'AUSENTE en la política.',
         norma_vulnerada: 'Art. 18 Ley 29733 + Art. 6.1.9 DS 016-2024-JUS',
         riesgo_infraccion: 'leve',
         base_infraccion: 'Art. 132.5 DS 016-2024-JUS',
@@ -824,14 +855,17 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
 
     // A.9 — Derechos ARCO
     const r_arco = detectores.arco
-    if (!r_arco.cumple) {
+    if (!r_arco.cumple || r_arco.cumple === 'PARCIAL') {
       const nivelArco = r_arco.nivel || ''
+      // Solo se cuenta como faltante del Art. 18 si AUSENCIA_TOTAL.
+      // PARCIAL (faltan sub-elementos) no incrementa el contador.
       if (nivelArco === 'AUSENCIA_TOTAL') contadorElementosFaltantesArt18++
+      const esParcialArco = r_arco.cumple === 'PARCIAL'
       observaciones.push({
         id: `OBS-${String(observaciones.length + 1).padStart(2, '0')}`,
         modulo: 'A',
         categoria: 'Derechos ARCO y mecanismos de ejercicio',
-        severidad: nivelArco === 'AUSENCIA_TOTAL' ? 'GRAVE' : 'IMPORTANTE',
+        severidad: nivelArco === 'AUSENCIA_TOTAL' ? 'GRAVE' : (esParcialArco ? 'MODERADA' : 'IMPORTANTE'),
         hallazgo: nivelArco === 'AUSENCIA_TOTAL'
           ? 'La política no informa sobre los derechos ARCO ni los mecanismos para ejercerlos.'
           : 'Información sobre derechos ARCO incompleta: la política menciona los derechos pero omite uno o más elementos exigidos por la Ley 29733 y la Guía ANPDP. Revisar el detalle por sub-elementos.',

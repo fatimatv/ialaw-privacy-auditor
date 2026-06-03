@@ -157,6 +157,87 @@ describe("analizarCumplimiento", () => {
     expect(obsCoherencia?.requiere_verificacion_manual).toBe(true);
   });
 
+  it("incumplimientos parciales reciben severidad MODERADA y no incrementan el contador Art. 18", async () => {
+    // Texto con UNA deficiencia parcial por categoria: razon social SI esta
+    // pero el domicilio queda incompleto; finalidad declarada pero con
+    // expresion generica prohibida; banco de datos mencionado sin codigo;
+    // ARCO mencionados pero sin revocacion ni ANPDP; plazo vago.
+    const texto = `
+      Empresa Demo S.A.C. con RUC 20123456789. Sin direccion completa.
+      Finalidad: gestionar nuestros servicios y entre otras finalidades comerciales.
+      No compartimos sus datos a nivel nacional o internacional.
+      Los datos se almacenan en el banco de datos personales de clientes.
+      Datos obligatorios y facultativos identificados.
+      Si no proporciona los datos no podremos brindar el servicio.
+      Conservamos los datos por el tiempo necesario.
+      Puede ejercer sus derechos ARCO escribiendo a privacidad@example.com.
+      Ley 29733 y DS 016-2024-JUS.
+    `;
+    const resultado = await analizarCumplimiento({
+      url_auditada: "https://example.com",
+      politica_privacidad: { encontrada: true, texto },
+      formularios: [],
+      cookies_banner: { encontrado: false, texto: "" },
+      html_completo: "",
+    });
+    const obsIdentidad = resultado.observaciones.find((o) => o.categoria === "Identidad y domicilio del responsable");
+    const obsBanco = resultado.observaciones.find((o) => o.categoria === "Banco de datos personales");
+    const obsPlazo = resultado.observaciones.find((o) => o.categoria === "Plazo de conservación de datos");
+    const obsArco = resultado.observaciones.find((o) => o.categoria === "Derechos ARCO y mecanismos de ejercicio");
+    expect(obsIdentidad?.severidad).toBe("MODERADA");
+    expect(obsBanco?.severidad).toBe("MODERADA");
+    expect(obsPlazo?.severidad).toBe("MODERADA");
+    expect(obsArco?.severidad).toBe("MODERADA");
+    // Los cinco elementos son PARCIALES (no AUSENCIA TOTAL), por lo que
+    // ninguno debe incrementar contadorElementosFaltantesArt18.
+    expect(resultado.elementos_faltantes_art18).toBe(0);
+    // El cuadro Art. 18 debe mostrar estos elementos como PARCIAL, no INCUMPLE.
+    const cuadro = resultado.cuadro_art18;
+    expect(cuadro.find((e) => e.codigo === "A.2")?.estado).toBe("PARCIAL");
+    expect(cuadro.find((e) => e.codigo === "A.5")?.estado).toBe("PARCIAL");
+    expect(cuadro.find((e) => e.codigo === "A.8")?.estado).toBe("PARCIAL");
+    expect(cuadro.find((e) => e.codigo === "A.9")?.estado).toBe("PARCIAL");
+  });
+
+  it("finalidad con expresion generica (PARCIAL) recibe IMPORTANTE; condicionamiento ilicito (HARD) recibe GRAVE", async () => {
+    const textoGenerico = `
+      Empresa Demo S.A.C. con RUC 20123456789, domiciliada en Av. Principal 123, Miraflores, Lima.
+      Finalidad: gestionar nuestros servicios y entre otras finalidades comerciales.
+      Banco de datos RNPDP N° 12345. Datos obligatorios y facultativos.
+      Si no proporciona no atenderemos. Conservamos durante la vigencia.
+      Derechos ARCO via arco@example.com. Puede revocar consentimiento.
+      ANPDP autoridad tutela. Ley 29733.
+    `;
+    const r1 = await analizarCumplimiento({
+      url_auditada: "https://example.com",
+      politica_privacidad: { encontrada: true, texto: textoGenerico },
+      formularios: [],
+      cookies_banner: { encontrado: false, texto: "" },
+      html_completo: "",
+    });
+    const obsFinG = r1.observaciones.find((o) => o.categoria === "Finalidad del tratamiento");
+    expect(obsFinG?.severidad).toBe("IMPORTANTE");
+
+    const textoCondicionado = `
+      Empresa Demo S.A.C. con RUC 20123456789, domiciliada en Av. Principal 123, Miraflores, Lima.
+      Finalidad principal: gestionar el servicio.
+      Solo si acepta nuestra publicidad podremos continuar con su registro.
+      Banco de datos RNPDP N° 12345. Datos obligatorios y facultativos.
+      Si no proporciona no atenderemos. Conservamos durante la vigencia.
+      Derechos ARCO via arco@example.com. Puede revocar consentimiento.
+      ANPDP autoridad tutela. Ley 29733.
+    `;
+    const r2 = await analizarCumplimiento({
+      url_auditada: "https://example.com",
+      politica_privacidad: { encontrada: true, texto: textoCondicionado },
+      formularios: [],
+      cookies_banner: { encontrado: false, texto: "" },
+      html_completo: "",
+    });
+    const obsFinC = r2.observaciones.find((o) => o.categoria === "Finalidad del tratamiento");
+    expect(obsFinC?.severidad).toBe("GRAVE");
+  });
+
   it("sigue reportando como incompleto un domicilio sin via ni frase introductoria", async () => {
     const texto = `
       Empresa Demo S.A.C. RUC 20123456789. Enrique Palacios 360.
