@@ -138,10 +138,23 @@ function priorizarRutas(urls) {
   return [...probables, ...resto];
 }
 
-function seleccionarHrefPolitica(enlaces) {
-  return enlaces.find((link) =>
+function seleccionarHrefPolitica(enlaces, origen) {
+  const candidatos = enlaces.filter((link) =>
     TEXTO_POLITICA.test(`${link.texto ?? ""} ${link.href ?? ""}`),
-  )?.href;
+  );
+  if (candidatos.length === 0) return undefined;
+  // Preferir same-origin: muchos sitios tienen links a politicas de
+  // terceros (Google reCAPTCHA, Cloudflare, etc) que matchean antes
+  // que la politica del propio sitio.
+  const mismoOrigen = candidatos.find((link) => {
+    if (!link.href || !origen) return false;
+    try {
+      return new URL(link.href).origin === origen.origin;
+    } catch {
+      return false;
+    }
+  });
+  return (mismoOrigen ?? candidatos[0])?.href;
 }
 
 async function leerSitemap(browser, origen) {
@@ -155,7 +168,7 @@ async function leerSitemap(browser, origen) {
     } catch {
       continue;
     }
-    const page = await browser.newPage();
+    const page = await context.newPage();
     try {
       const response = await page
         .goto(sitemapUrl, {
@@ -198,7 +211,7 @@ async function extraerEnlacesInternos(page, origen) {
 }
 
 async function abrirYExtraerHtml(browser, url) {
-  const page = await browser.newPage();
+  const page = await context.newPage();
   try {
     await page.goto(url, {
       waitUntil: "domcontentloaded",
@@ -216,7 +229,7 @@ async function abrirYExtraerHtml(browser, url) {
 }
 
 async function obtenerEnlacesYHtmlHome(browser, url, origen) {
-  const page = await browser.newPage();
+  const page = await context.newPage();
   try {
     await page.goto(url, {
       waitUntil: "domcontentloaded",
@@ -235,7 +248,7 @@ async function obtenerEnlacesYHtmlHome(browser, url, origen) {
           texto: link.textContent ?? "",
         })),
       )
-      .then((links) => seleccionarHrefPolitica(links))
+      .then((links) => seleccionarHrefPolitica(links, origen))
       .catch(() => undefined);
     return { html, enlaces, politicaHref };
   } finally {
@@ -244,7 +257,7 @@ async function obtenerEnlacesYHtmlHome(browser, url, origen) {
 }
 
 async function obtenerTextoPolitica(browser, urlPolitica) {
-  const page = await browser.newPage();
+  const page = await context.newPage();
   try {
     await page
       .goto(urlPolitica, {
@@ -261,6 +274,35 @@ async function obtenerTextoPolitica(browser, urlPolitica) {
   }
 }
 
+// UA realista de Chrome estable. Sin esto, muchos sitios con anti-bot
+// (Akamai, Cloudflare, Imperva, Datadome) detectan el "HeadlessChrome"
+// de Playwright y sirven HTML vacio o un captcha. Es la primer linea de
+// defensa que vence; sitios mas duros siguen filtrando.
+const USER_AGENT =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+
+// El contexto se crea en main() y se setea aca para que las helpers
+// (leerSitemap, abrirYExtraerHtml, etc.) lo puedan usar sin necesidad
+// de pasarlo como parametro en cada llamada.
+let context;
+
+async function nuevoContexto(browser) {
+  const ctx = await browser.newContext({
+    userAgent: USER_AGENT,
+    viewport: { width: 1920, height: 1080 },
+    locale: "es-PE",
+    timezoneId: "America/Lima",
+    extraHTTPHeaders: {
+      "Accept-Language": "es-PE,es;q=0.9,en;q=0.8",
+    },
+  });
+  // Quitar navigator.webdriver=true, el flag mas obvio de headless.
+  await ctx.addInitScript(() => {
+    Object.defineProperty(navigator, "webdriver", { get: () => undefined });
+  });
+  return ctx;
+}
+
 async function main() {
   const url = process.argv[2];
   const maxPaginas = Math.max(1, Math.min(20, Number(process.argv[3] ?? 4)));
@@ -272,6 +314,7 @@ async function main() {
 
   const origen = new URL(url);
   const browser = await chromium.launch({ headless: true });
+  context = await nuevoContexto(browser);
 
   try {
     const { html: htmlHome, enlaces, politicaHref } =

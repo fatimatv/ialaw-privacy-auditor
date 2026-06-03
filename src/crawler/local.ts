@@ -141,7 +141,7 @@ async function obtenerEnlacesYHtmlHome(
           texto: link.textContent ?? "",
         })),
       )
-      .then((links) => seleccionarHrefPolitica(links))
+      .then((links) => seleccionarHrefPolitica(links, origen.origin))
       .catch(() => undefined);
     return { html, enlaces, politicaHref };
   } finally {

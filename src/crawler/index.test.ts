@@ -11,6 +11,30 @@ describe("seleccionarHrefPolitica", () => {
 
     expect(href).toBe("https://example.com/legal/123");
   });
+
+  it("prefiere politicas same-origin cuando hay multiples candidatos", () => {
+    // Caso real: footer con reCAPTCHA enlaza a Google privacy ANTES que
+    // el propio link de privacidad del sitio. Sin preferencia same-origin,
+    // tomariamos la de Google.
+    const href = seleccionarHrefPolitica(
+      [
+        { href: "https://policies.google.com/privacy", texto: "Privacy Policy" },
+        { href: "https://www.banco.pe/legal/privacidad", texto: "Politica de privacidad" },
+      ],
+      "https://www.banco.pe",
+    );
+    expect(href).toBe("https://www.banco.pe/legal/privacidad");
+  });
+
+  it("cae al primer candidato si no hay match same-origin", () => {
+    const href = seleccionarHrefPolitica(
+      [
+        { href: "https://policies.google.com/privacy", texto: "Privacy Policy" },
+      ],
+      "https://www.banco.pe",
+    );
+    expect(href).toBe("https://policies.google.com/privacy");
+  });
 });
 
 describe("validarUrlPublica", () => {
