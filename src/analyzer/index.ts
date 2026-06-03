@@ -51,12 +51,20 @@ type DatosCrawlerEntrada = Partial<Omit<DatosCrawler, 'formularios'>> & {
 const det = {
   // A.2 — IDENTIDAD Y DOMICILIO
   identidadResponsable(t: string): ResultadoDetector {
-    const tieneNombre = /(S\.?A\.?C?\.?|S\.?R\.?L?\.?|E\.?I\.?R\.?L?\.?|sociedad|empresa|corporaci[oó]n|grupo\s+\w+|razón social|denominación social)/i.test(t)
+    const tieneNombre = /(S\.?A\.?C?\.?|S\.?R\.?L?\.?|S\.?\s*Civil\s+de\s+R\.?\s*L\.?|E\.?I\.?R\.?L?\.?|sociedad\s+(an[oó]nima|civil|comercial|de\s+responsabilidad)|empresa|corporaci[oó]n|grupo\s+\w+|raz[oó]n social|denominaci[oó]n social|asociaci[oó]n\s+civil)/i.test(t)
     const tieneRUC = /RUC[\s:]*\d{11}/i.test(t)
     const tieneVia = /(av\.|avenida|jr\.|jirón|calle|pasaje|psje\.|carretera|prolongaci[oó]n)/i.test(t)
+    // Tambien aceptamos domicilios sin prefijo de via explicita cuando
+    // van introducidos por una frase de domicilio ("domiciliada en X",
+    // "con sede en X", etc.). En Lima es habitual decir "domiciliada en
+    // Enrique Palacios 360" sin escribir "Av./Calle/Jr.". El nombre de
+    // la via se infiere de la frase introductoria + el numero/distrito
+    // que sigue, lo que cubre la exigencia de via+numero+distrito de la
+    // Guia ANPDP §4.1 sin pedir literalidad innecesaria.
+    const tieneFraseDomicilio = /(domicilio\s+en|domiciliad[oa]\s+en|ubicad[oa]\s+en|con\s+sede\s+en|sede\s+social\s+en|oficinas?\s+en)/i.test(t)
     const tieneNumero = /n[°º]?\s*\d+|#\s*\d+|\d+\s*,\s*(piso|of\.|oficina|dpto)/i.test(t)
     const tieneDistrito = /(miraflores|san isidro|surco|barranco|lince|jesús maría|magdalena|pueblo libre|san borja|la molina|surquillo|chorrillos|ate|san juan|los olivos|independencia|comas|callao|lima|cercado|trujillo|arequipa|cusco|piura|chiclayo)/i.test(t)
-    const tieneDomicilioCompleto = tieneVia && (tieneNumero || tieneDistrito)
+    const tieneDomicilioCompleto = (tieneVia || tieneFraseDomicilio) && (tieneNumero || tieneDistrito)
     const pareceExtranjero = /(incorporated|inc\.|ltd\.|llc\.|gmbh|s\.p\.a\.|b\.v\.|plc\.|corp\.|delaware|cayman|irlanda|holanda|luxemburgo)/i.test(t)
     const tieneRepresentante = /(representante en perú|representante legal en perú|delegado en perú)/i.test(t)
     const resultado: ResultadoDetector = { cumple: true, detalles: [] }
@@ -514,7 +522,7 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
         severidad: 'IMPORTANTE',
         hallazgo: r_identidad.nivel === 'AUSENCIA_TOTAL'
           ? 'No se identifica al titular del banco de datos ni su domicilio.'
-          : r_identidad.nivel === 'SIN_NOMBRE'
+          : r_identidad.nivel === 'SIN_RAZON_SOCIAL' || r_identidad.nivel === 'SIN_NOMBRE'
             ? 'La política no identifica claramente la razón social del responsable del tratamiento.'
             : 'La política no indica el domicilio o dirección del responsable del tratamiento.',
         evidencia: 'AUSENTE en el texto de la política.',
