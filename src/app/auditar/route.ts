@@ -6,6 +6,7 @@ import { limitadorAuditar, obtenerIdentificadorCliente } from "@/lib/rate-limit"
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 const SolicitudAuditoria = z.object({
   url: z.string().url(),

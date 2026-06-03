@@ -51,9 +51,12 @@ Luego abre [http://localhost:3000](http://localhost:3000) y pega una URL públic
 
 ## Despliegue
 
-Playwright requiere un binario de Chromium (~300 MB). Vercel Functions estándar no lo trae out-of-the-box. Para producción, usar:
-- `@sparticuz/chromium` + `playwright-core` en una función Node con tamaño ampliado, o
-- un worker dedicado (Vercel Sandbox, Render, Fly.io) que mantenga el browser caliente.
+El proyecto está configurado para correr en Vercel Functions:
+
+- `dependencies` usa `playwright-core` (sin browsers bundle) + `@sparticuz/chromium` (binario de Chromium ~45MB compatible con Lambda/Vercel Functions).
+- `src/lib/browser.ts` detecta `VERCEL=1` (o `AWS_LAMBDA_FUNCTION_NAME`) y arranca Chromium con el path de `@sparticuz/chromium`. En local, usa el Chromium que `npx playwright install chromium` descarga.
+- `vercel.json` asigna `memory: 1024 MB` y `maxDuration: 60s` a `/auditar` y `/reporte` (configurable más arriba según plan de Vercel).
+- En serverless el cap de páginas a crawlear baja a 4 por defecto (ajustable con `AUDITOR_MAX_PAGINAS`) para entrar dentro del límite de 60s. En local sigue siendo 8.
 
 ## Reglas legales
 
