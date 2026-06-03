@@ -2,9 +2,14 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { NextResponse } from "next/server";
 import type { ResultadoAuditoria } from "@/analyzer/types";
-import { lanzarChromium } from "@/lib/browser";
 import { limitadorReporte, obtenerIdentificadorCliente } from "@/lib/rate-limit";
 import { crearHtmlReporte, type LogosReporte } from "@/report/pdf";
+
+const ES_SERVERLESS = Boolean(
+  process.env.VERCEL ||
+    process.env.AWS_LAMBDA_FUNCTION_NAME ||
+    process.env.LAMBDA_TASK_ROOT,
+);
 
 function logoComoDataUri(nombreArchivo: string): string | undefined {
   try {
@@ -41,6 +46,33 @@ function nombreArchivoReporte(resultado: ResultadoAuditoria): string {
   return `reporte-ialaw-${host || "auditoria"}.pdf`;
 }
 
+async function imprimirLocalmente(html: string): Promise<Buffer> {
+  const { chromium } = await import("playwright");
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.setContent(html, { waitUntil: "load" });
+    const pdf = await page.pdf({
+      format: "A4",
+      printBackground: true,
+      preferCSSPageSize: true,
+      displayHeaderFooter: true,
+      headerTemplate: "<div></div>",
+      footerTemplate:
+        '<div style="width:100%;font-size:9px;color:#6F7072;padding:0 18mm;text-align:right;">Pagina <span class="pageNumber"></span> de <span class="totalPages"></span></div>',
+      margin: {
+        top: "10mm",
+        right: "0mm",
+        bottom: "14mm",
+        left: "0mm",
+      },
+    });
+    return Buffer.from(pdf);
+  } finally {
+    await browser.close();
+  }
+}
+
 export async function POST(request: Request) {
   const identificador = obtenerIdentificadorCliente(request.headers);
   const limite = limitadorReporte.check(identificador);
@@ -61,36 +93,19 @@ export async function POST(request: Request) {
   }
 
   const html = crearHtmlReporte(body.resultado, cargarLogos());
-  const browser = await lanzarChromium();
 
-  try {
-    const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: "load" });
-    const pdf = await page.pdf({
-      format: "A4",
-      printBackground: true,
-      preferCSSPageSize: true,
-      displayHeaderFooter: true,
-      headerTemplate: "<div></div>",
-      footerTemplate:
-        '<div style="width:100%;font-size:9px;color:#6F7072;padding:0 18mm;text-align:right;">Pagina <span class="pageNumber"></span> de <span class="totalPages"></span></div>',
-      margin: {
-        top: "10mm",
-        right: "0mm",
-        bottom: "14mm",
-        left: "0mm",
-      },
-    });
-
-    const bodyPdf = new Uint8Array(pdf);
-
-    return new NextResponse(bodyPdf, {
-      headers: {
-        "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="${nombreArchivoReporte(body.resultado)}"`,
-      },
-    });
-  } finally {
-    await browser.close();
+  let pdf: Buffer;
+  if (ES_SERVERLESS) {
+    const { imprimirPdfEnSandbox } = await import("@/lib/sandbox-printer");
+    pdf = await imprimirPdfEnSandbox(html);
+  } else {
+    pdf = await imprimirLocalmente(html);
   }
+
+  return new NextResponse(new Uint8Array(pdf), {
+    headers: {
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `attachment; filename="${nombreArchivoReporte(body.resultado)}"`,
+    },
+  });
 }
