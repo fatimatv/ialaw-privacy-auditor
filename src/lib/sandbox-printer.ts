@@ -57,9 +57,10 @@ export async function imprimirPdfEnSandbox(html: string): Promise<Buffer> {
       { path: "informe.html", content: html },
     ]);
 
-    const ejecucion = (await sandbox.runCommand("sh", [
-      "-c",
-      "PLAYWRIGHT_BROWSERS_PATH=0 node sandbox-printer.mjs",
+    const ejecucion = (await sandbox.runCommand("env", [
+      "PLAYWRIGHT_BROWSERS_PATH=0",
+      "node",
+      "sandbox-printer.mjs",
     ])) as unknown as ConSalida;
 
     if (ejecucion.exitCode !== 0) {

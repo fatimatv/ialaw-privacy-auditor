@@ -40,20 +40,61 @@ async function main() {
   });
 
   try {
-    console.log("Instalando playwright...");
-    await sandbox.runCommand("npm", ["install", "playwright"]);
+    console.log("Verificando cwd inicial...");
+    const pwdResult = await sandbox.runCommand("pwd", []);
+    console.log("  cwd:", (await pwdResult.stdout()).trim());
 
-    // PLAYWRIGHT_BROWSERS_PATH=0 instala Chromium dentro de
-    // node_modules/playwright-core/.local-browsers/ en vez de
-    // ~/.cache/ms-playwright. Lo importante: queda dentro de la cwd
-    // del sandbox, asi el snapshot lo captura. Con la ubicacion default
-    // en home, el snapshot no lo preserva y el sandbox levantado desde
-    // el snapshot piensa que playwright no esta "installed".
-    console.log("Descargando Chromium en node_modules (esto tarda 30-60s)...");
+    // El sandbox corre Amazon Linux (dnf). Playwright --with-deps asume
+    // Ubuntu/apt-get y falla. Hay que instalar las libs del sistema que
+    // Chromium necesita (nss, gtk3, libXcomposite, etc.) por separado.
+    // Lista tomada del skill oficial de Vercel agent-browser.
+    const CHROMIUM_SYSTEM_DEPS = [
+      "nss", "nspr", "libxkbcommon", "atk", "at-spi2-atk", "at-spi2-core",
+      "libXcomposite", "libXdamage", "libXrandr", "libXfixes", "libXcursor",
+      "libXi", "libXtst", "libXScrnSaver", "libXext", "mesa-libgbm", "libdrm",
+      "mesa-libGL", "mesa-libEGL", "cups-libs", "alsa-lib", "pango", "cairo",
+      "gtk3", "dbus-libs",
+    ];
+    console.log("Instalando librerias del sistema para Chromium...");
+    const depsResult = await sandbox.runCommand("sh", [
+      "-c",
+      `sudo dnf clean all 2>&1 && sudo dnf install -y --skip-broken ${CHROMIUM_SYSTEM_DEPS.join(" ")} 2>&1 && sudo ldconfig 2>&1`,
+    ]);
+    if (depsResult.exitCode !== 0) {
+      console.error("  stderr:", await depsResult.stderr());
+      throw new Error("dnf install fallo");
+    }
+
+    console.log("Instalando playwright (sin postinstall que descarga browsers)...");
     await sandbox.runCommand("sh", [
       "-c",
-      "PLAYWRIGHT_BROWSERS_PATH=0 npx playwright install --with-deps chromium",
+      "PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install playwright",
     ]);
+
+    console.log("Descargando Chromium en node_modules (esto tarda 30-60s)...");
+    const installResult = await sandbox.runCommand("sh", [
+      "-c",
+      "PLAYWRIGHT_BROWSERS_PATH=0 npx playwright install chromium",
+    ]);
+    console.log("  exitCode:", installResult.exitCode);
+    if (installResult.exitCode !== 0) {
+      console.error("  stderr:", await installResult.stderr());
+      throw new Error("Playwright install fallo");
+    }
+
+    console.log("Verificando que el binario quedo en node_modules...");
+    const lsResult = await sandbox.runCommand("sh", [
+      "-c",
+      "find node_modules/playwright-core -name 'chrome-headless-shell' -type f 2>/dev/null | head -5",
+    ]);
+    const found = (await lsResult.stdout()).trim();
+    console.log("  Binarios encontrados:");
+    console.log(found || "  (ninguno)");
+    if (!found) {
+      throw new Error(
+        "chrome-headless-shell no esta en node_modules. PLAYWRIGHT_BROWSERS_PATH=0 no funciono.",
+      );
+    }
 
     console.log("Creando snapshot del sandbox...");
     const snapshot = await sandbox.snapshot();
