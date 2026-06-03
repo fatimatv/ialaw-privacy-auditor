@@ -35,7 +35,26 @@ function renderRiesgo(observacion: { riesgo_infraccion?: string; rango_multa_apl
   return partes.join("");
 }
 
-export function crearHtmlReporte(resultado: ResultadoAuditoria): string {
+export type LogosReporte = {
+  /** Logo vertical para la portada del PDF. Acepta data: URI o URL absoluta. */
+  vertical?: string;
+  /** Logo horizontal para encabezados internos del PDF. */
+  horizontal?: string;
+};
+
+function renderMarcaPortada(logoVertical?: string): string {
+  if (!logoVertical) {
+    return `<div class="brand">IALAW</div>`;
+  }
+  return `<div class="brand brand--logo"><img src="${escaparHtml(logoVertical)}" alt="IALAW" /></div>`;
+}
+
+function renderMarcaInterior(logoHorizontal?: string): string {
+  if (!logoHorizontal) return "";
+  return `<div class="brand-inner"><img src="${escaparHtml(logoHorizontal)}" alt="IALAW" /></div>`;
+}
+
+export function crearHtmlReporte(resultado: ResultadoAuditoria, logos: LogosReporte = {}): string {
   const observaciones = resultado.observaciones
     .map(
       (observacion) => `
@@ -90,6 +109,21 @@ export function crearHtmlReporte(resultado: ResultadoAuditoria): string {
         font-size: 20px;
         font-weight: 900;
         letter-spacing: 0.22em;
+      }
+      .brand--logo img {
+        display: block;
+        max-height: 140px;
+        max-width: 220px;
+        height: auto;
+        width: auto;
+      }
+      .brand-inner {
+        margin-bottom: 14px;
+      }
+      .brand-inner img {
+        display: block;
+        height: 36px;
+        width: auto;
       }
       h1 {
         margin: 70px 0 18px;
@@ -184,7 +218,7 @@ export function crearHtmlReporte(resultado: ResultadoAuditoria): string {
   <body>
     <section class="cover">
       <div>
-        <div class="brand">IALAW</div>
+        ${renderMarcaPortada(logos.vertical)}
         <h1>${TITULO_REPORTE}</h1>
         <p class="subtitle">${escaparHtml(resultado.resumen_ejecutivo)}</p>
         <div class="score">${escaparHtml(resultado.puntaje_cumplimiento)}/100</div>
@@ -194,6 +228,8 @@ export function crearHtmlReporte(resultado: ResultadoAuditoria): string {
         <p><strong>Fecha:</strong> ${formatearFecha(resultado.fecha_auditoria)}</p>
       </div>
     </section>
+
+    ${renderMarcaInterior(logos.horizontal)}
 
     <section class="section">
       <h2>Resumen ejecutivo</h2>

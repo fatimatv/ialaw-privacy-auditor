@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { analizarCumplimiento } from "@/analyzer";
 import { auditarSitioPublico } from "@/crawler";
+import { limitadorAuditar, obtenerIdentificadorCliente } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,6 +12,18 @@ const SolicitudAuditoria = z.object({
 });
 
 export async function POST(request: Request) {
+  const identificador = obtenerIdentificadorCliente(request.headers);
+  const limite = limitadorAuditar.check(identificador);
+  if (!limite.allowed) {
+    return NextResponse.json(
+      { error: "Has alcanzado el limite de auditorias. Intenta nuevamente mas tarde." },
+      {
+        status: 429,
+        headers: { "Retry-After": String(limite.retryAfterSeconds ?? 60) },
+      },
+    );
+  }
+
   const body = await request.json().catch(() => null);
   const parsed = SolicitudAuditoria.safeParse(body);
 
