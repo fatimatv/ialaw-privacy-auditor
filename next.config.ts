@@ -7,6 +7,22 @@ const nextConfig: NextConfig = {
   // deben quedarse como externals para que las route functions de Vercel
   // puedan cargarlos en runtime.
   serverExternalPackages: ["@sparticuz/chromium", "playwright-core"],
+
+  // playwright-core hace require('../browsers.json') dinamicamente; sparticuz
+  // necesita su bin/ con el .tar.br del Chromium. Sin esto, Vercel los excluye
+  // del bundle de la function por file tracing y vemos
+  // "Cannot find module '/var/task/node_modules/playwright-core/browsers.json'"
+  // al primer launch.
+  outputFileTracingIncludes: {
+    "/auditar": [
+      "./node_modules/playwright-core/**/*",
+      "./node_modules/@sparticuz/chromium/**/*",
+    ],
+    "/reporte": [
+      "./node_modules/playwright-core/**/*",
+      "./node_modules/@sparticuz/chromium/**/*",
+    ],
+  },
 };
 
 export default nextConfig;
