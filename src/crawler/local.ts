@@ -1,9 +1,8 @@
 import { chromium, type Browser, type Page } from "playwright";
 import type { DatosCrawler } from "../analyzer/types";
 import { combinarEvidencias, extraerEvidenciaPublica } from "../extractor";
+import { seleccionarHrefPolitica } from "./policy-link";
 import { validarUrlPublica } from "./url-guard";
-
-const TEXTO_POLITICA = /(privacidad|protecci[oó]n de datos|datos personales|privacy)/i;
 
 // Rutas que tipicamente alojan formularios de captacion de datos.
 // Se priorizan para que el crawler las visite primero dentro del cupo.
@@ -18,17 +17,6 @@ const TIMEOUT_NAV_MS = 30_000;
 const TIMEOUT_NETWORKIDLE_MS = 8_000;
 const TIMEOUT_SITEMAP_MS = 10_000;
 const TIMEOUT_POLITICA_INNERTEXT_MS = 5_000;
-
-type EnlaceCandidato = {
-  href?: string;
-  texto?: string;
-};
-
-export function seleccionarHrefPolitica(enlaces: EnlaceCandidato[]): string | undefined {
-  return enlaces.find((link) =>
-    TEXTO_POLITICA.test(`${link.texto ?? ""} ${link.href ?? ""}`),
-  )?.href;
-}
 
 function normalizarUrl(href: string): string {
   try {

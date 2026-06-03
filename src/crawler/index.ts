@@ -33,4 +33,4 @@ export async function auditarSitioPublico(urlEntrada: string): Promise<DatosCraw
 }
 
 // Helpers exportados que el test del crawler todavia ejercita.
-export { seleccionarHrefPolitica } from "./local";
+export { seleccionarHrefPolitica } from "./policy-link";
