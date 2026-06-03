@@ -104,6 +104,59 @@ describe("analizarCumplimiento", () => {
     expect(obsBanco?.severidad).toBe("MODERADA");
   });
 
+  it("acepta como cumplimiento una politica que declara expresamente no compartir datos a nivel nacional o internacional", async () => {
+    const texto = `
+      Empresa Demo S.A.C. con RUC 20123456789, domiciliada en Av. Principal 123, Miraflores, Lima.
+      Finalidad: gestión de clientes.
+      No compartimos sus datos a nivel nacional o internacional.
+      Los datos se almacenan en el banco de datos personales de clientes, RNPDP N° 12345.
+      Datos obligatorios y facultativos identificados.
+      Si no proporciona los datos no podremos brindar el servicio.
+      Conservamos los datos durante la vigencia del contrato.
+      Derechos ARCO via arco@example.com. Puede revocar el consentimiento.
+      La Autoridad Nacional de Protección de Datos Personales es la autoridad de tutela.
+      Ley 29733 y DS 016-2024-JUS.
+    `;
+    const resultado = await analizarCumplimiento({
+      url_auditada: "https://example.com",
+      politica_privacidad: { encontrada: true, texto },
+      formularios: [],
+      cookies_banner: { encontrado: false, texto: "" },
+      html_completo: "",
+    });
+    const obsDest = resultado.observaciones.find((o) => o.categoria === "Destinatarios de los datos");
+    const obsTransf = resultado.observaciones.find((o) => o.categoria === "Transferencia internacional de datos");
+    expect(obsDest).toBeUndefined();
+    expect(obsTransf).toBeUndefined();
+  });
+
+  it("cuando la politica declara no compartir pero hay trackers, emite advertencia MODERADA de coherencia (no GRAVE)", async () => {
+    const texto = `
+      Empresa Demo S.A.C. con RUC 20123456789, domiciliada en Av. Principal 123, Miraflores, Lima.
+      Finalidad: gestión de clientes.
+      No transferimos datos al extranjero. Los datos permanecen en Perú.
+      Banco de datos RNPDP N° 12345.
+      Datos obligatorios y facultativos. Si no proporciona no atenderemos.
+      Conservamos durante la vigencia.
+      Derechos ARCO via arco@example.com. Puede revocar consentimiento.
+      ANPDP autoridad tutela. Ley 29733.
+    `;
+    const htmlConTrackers = '<html><script src="https://www.googletagmanager.com/gtm.js"></script></html>';
+    const resultado = await analizarCumplimiento({
+      url_auditada: "https://example.com",
+      politica_privacidad: { encontrada: true, texto },
+      formularios: [],
+      cookies_banner: { encontrado: false, texto: "" },
+      html_completo: htmlConTrackers,
+    });
+    const obsTrackersGrave = resultado.observaciones.find((o) => o.categoria === "Trackers de terceros no declarados");
+    const obsCoherencia = resultado.observaciones.find((o) => o.categoria === "Coherencia entre declaración y trackers detectados");
+    expect(obsTrackersGrave).toBeUndefined();
+    expect(obsCoherencia).toBeDefined();
+    expect(obsCoherencia?.severidad).toBe("MODERADA");
+    expect(obsCoherencia?.requiere_verificacion_manual).toBe(true);
+  });
+
   it("sigue reportando como incompleto un domicilio sin via ni frase introductoria", async () => {
     const texto = `
       Empresa Demo S.A.C. RUC 20123456789. Enrique Palacios 360.

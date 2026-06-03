@@ -51,6 +51,28 @@ type DatosCrawlerEntrada = Partial<Omit<DatosCrawler, 'formularios'>> & {
 }
 
 // ─────────────────────────────────────────────────
+// HELPERS COMPARTIDOS
+// ─────────────────────────────────────────────────
+
+// Detecta si la politica DECLARA EXPRESAMENTE que no comparte/transfiere
+// datos (a terceros, a nivel nacional, a nivel internacional, al
+// extranjero o fuera del Peru). Bajo el principio de veracidad de las
+// declaraciones, si la politica lo afirma asi, se asume verdadero y no
+// se trata como incumplimiento. Se busca una NEGACION + un OBJETO de
+// transferencia en la MISMA oracion para evitar falsos positivos.
+const NEGACION_TRANSFERENCIA =
+  /(no\s+(?:se\s+)?(?:transfer[a-zñáéíóú]+|compart[a-zñáéíóú]+|cede[a-zñáéíóú]*|comunic[a-zñáéíóú]+|vend[a-zñáéíóú]+|distribuy[a-zñáéíóú]*|divulg[a-zñáéíóú]*|entreg[a-zñáéíóú]+|realiza[a-zñáéíóú]*|hace[a-zñáéíóú]*|efectu[a-zñáéíóú]+)|datos\s+(?:solo|únicamente|exclusivamente)\s+(?:en\s+)?per[uú]|datos\s+permanece[a-zñáéíóú]+\s+en\s+(?:el\s+)?per[uú])/i
+const OBJETO_TRANSFERENCIA =
+  /(?:a\s+terceros|con\s+terceros|a\s+(?:nivel\s+)?nacional|a\s+(?:nivel\s+)?internacional|al\s+extranjero|al\s+exterior|fuera\s+del\s+(?:pa[ií]s|per[uú])|a\s+(?:otros\s+)?pa[ií]ses|transferencia(?:s)?(?:\s+internacional)?|fuera\s+del\s+territorio\s+nacional)/i
+
+function declaraQueNoComparte(t: string): boolean {
+  const oraciones = t.split(/[.!?\n]+/)
+  return oraciones.some(
+    (s) => NEGACION_TRANSFERENCIA.test(s) && OBJETO_TRANSFERENCIA.test(s),
+  )
+}
+
+// ─────────────────────────────────────────────────
 // NIVEL 1: FUNCIONES DE DETECCIÓN ATÓMICA
 // Cada función detecta UN concepto normativo con múltiples variantes
 // ─────────────────────────────────────────────────
@@ -176,7 +198,7 @@ const det = {
   // A.4 — DESTINATARIOS
   destinatarios(t: string): ResultadoDetector {
     const declara = /(destinatario|receptor|comparten.*datos|transferimos.*a|comunicamos.*a|proveedores.*que|terceros.*que|encargados.*de\s+tratamiento)/i.test(t)
-    const noTransfiere = /(no\s+se\s+transfieren|no\s+compartimos|no\s+cedemos|no\s+transferimos|no\s+comunicamos\s+a\s+terceros)/i.test(t)
+    const noTransfiere = declaraQueNoComparte(t)
     const usaHipervinculo = /(ver\s+lista|más\s+información|consultar\s+aquí|enlace|hipervínculo|link)/i.test(t)
     if (!declara && !noTransfiere) {
       return {
@@ -200,7 +222,7 @@ const det = {
     const mencionaServicioExterno = regexServicios.test(t)
     const paisesExtranjeros = /(estados\s+unidos|usa|u\.s\.a|europa|españa|colombia|chile|argentina|brasil|méxico|canadá|reino\s+unido|alemania|francia|irlanda|holanda|suiza)/i.test(t)
     const declaraTransferencia = /(transferencia\s+internacional|flujo\s+transfronterizo|fuera\s+del\s+país|fuera\s+del\s+perú|datos.*al\s+extranjero|países\s+con\s+nivel\s+adecuado)/i.test(t)
-    const declaraNoTransfiere = /(no\s+se\s+realiza.*transferencia\s+internacional|datos.*solo.*perú|no\s+transferimos\s+datos\s+fuera|datos.*permanecen\s+en\s+perú)/i.test(t)
+    const declaraNoTransfiere = declaraQueNoComparte(t)
 
     if (declaraNoTransfiere) return { cumple: true }
     if ((mencionaServicioExterno || paisesExtranjeros) && !declaraTransferencia) {
@@ -996,7 +1018,8 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
   if (trackersEncontrados.length > 0) {
     const textoPol = texto || ''
     const politicaMencionaCookies = /(cookie|rastreo|seguimiento|analytics|tracker)/i.test(textoPol)
-    if (!politicaMencionaCookies) {
+    const politicaDeclaraNoTransfiere = declaraQueNoComparte(textoPol)
+    if (!politicaMencionaCookies && !politicaDeclaraNoTransfiere) {
       observaciones.push({
         id: `OBS-${String(observaciones.length + 1).padStart(2, '0')}`,
         modulo: 'C',
@@ -1008,6 +1031,26 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
         riesgo_infraccion: 'grave',
         base_infraccion: 'Art. 133.2 DS 016-2024-JUS',
         recomendacion: `Declarar en la política la transferencia internacional de datos a los países donde operan: ${trackersEncontrados.join(', ')}. Informar al titular sobre el uso de estas herramientas y sus finalidades.`
+      })
+    } else if (politicaDeclaraNoTransfiere) {
+      // La politica declara expresamente que no comparte/transfiere
+      // datos, pero el sitio si tiene trackers de terceros extranjeros.
+      // Bajo el principio de veracidad de las declaraciones se acepta
+      // la afirmacion de la politica, pero se anota una advertencia
+      // metodologica para que el auditor verifique manualmente la
+      // coherencia entre la declaracion y los trackers detectados.
+      observaciones.push({
+        id: `OBS-${String(observaciones.length + 1).padStart(2, '0')}`,
+        modulo: 'C',
+        categoria: 'Coherencia entre declaración y trackers detectados',
+        severidad: 'MODERADA',
+        hallazgo: `La política declara que no se comparten/transfieren datos, pero el sitio integra scripts de terceros extranjeros (${trackersEncontrados.join(', ')}) cuya tecnología típicamente implica flujo transfronterizo de datos. Verificación manual requerida para confirmar coherencia.`,
+        evidencia: `Scripts de terceros detectados: ${trackersEncontrados.join(', ')}`,
+        norma_vulnerada: 'Art. 15 Ley 29733 + Art. 6.1.7 DS 016-2024-JUS — principio de veracidad e integridad de la declaración',
+        riesgo_infraccion: 'leve',
+        base_infraccion: 'Art. 132.5 DS 016-2024-JUS',
+        recomendacion: `Verificar la coherencia entre la declaración de la política y los servicios de terceros efectivamente integrados en el sitio (${trackersEncontrados.join(', ')}). De confirmarse el uso, complementar la política declarando esos flujos o configurar los servicios para que no envíen datos personales al extranjero.`,
+        requiere_verificacion_manual: true,
       })
     }
   }
