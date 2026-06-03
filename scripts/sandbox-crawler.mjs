@@ -94,7 +94,20 @@ async function validarUrlPublica(urlEntrada) {
 }
 
 const RUTAS_CON_FORMULARIOS =
-  /(\/|^)(contact[oa]?|contact-us|register|registro|sign[-_]?up|signup|login|forgot[-_]?password|newsletter|suscri[bc][a-zñ]+|reserva[a-zñ]*|book[a-z]*|cotiza[a-zñ]*|presupuesto|solicitar|onboarding|alta|crear[-_]?cuenta)/i;
+  /(\/|^)(contact[oa]?|contact-us|register|registro|sign[-_]?up|signup|login|forgot[-_]?password|newsletter|suscri[bc][a-zñ]+|reserva[a-zñ]*|book[a-z]*|cotiza[a-zñ]*|presupuesto|solicitar|onboarding|alta|crear[-_]?cuenta|checkout|carrito|cart|pagar|pago|finalizar[-_]?compra|mi[-_]?cuenta|cuenta|iniciar[-_]?sesi[oó]n)/i;
+
+// Paths que solemos encontrar como formularios pero que muchos SPAs no
+// linkean explicitamente desde el home (los disparan via boton + JS
+// router). Si el descubrimiento por sitemap + links del home no los
+// encuentra, los sondeamos en paralelo (HEAD) para incorporarlos.
+const PROBES_FORMULARIOS = [
+  "/crear-cuenta", "/registro", "/register", "/signup", "/sign-up",
+  "/login", "/iniciar-sesion", "/sign-in",
+  "/checkout", "/carrito", "/cart", "/pagar",
+  "/contacto", "/contact", "/contact-us",
+  "/newsletter", "/suscribirse", "/suscripcion",
+  "/mi-cuenta", "/cuenta",
+];
 
 const URLS_NO_NAVEGABLES =
   /^(mailto|tel|javascript|sms|whatsapp):|\.(png|jpg|jpeg|gif|svg|webp|pdf|zip|rar|7z|ico|css|js|woff|woff2|ttf|otf|eot|mp4|mp3|webm|mov|avi)(\?|#|$)/i;
@@ -156,6 +169,37 @@ function seleccionarHrefPolitica(enlaces, origen) {
   return (mismoOrigen ?? candidatos[0])?.href;
 }
 
+async function sondearPathsComunes(origen) {
+  // HEAD en paralelo a cada path conocido. Si responde < 400 lo
+  // incorporamos como candidato. Cada request tiene timeout 5s; los 14
+  // sondeos en paralelo agregan ~5s al cold start de cada audit,
+  // pero permiten encontrar /crear-cuenta y /checkout en sitios SPA
+  // que no los linkean explicitamente desde el home.
+  const requests = PROBES_FORMULARIOS.map(async (path) => {
+    const url = `${origen.origin}${path}`;
+    try {
+      await validarUrlPublica(url);
+    } catch {
+      return null;
+    }
+    try {
+      const resp = await context.request.head(url, { timeout: 5_000 });
+      if (resp.status() < 400) return url;
+    } catch {
+      // Algunos servidores no permiten HEAD; intentamos GET liviano.
+      try {
+        const resp = await context.request.get(url, { timeout: 5_000 });
+        if (resp.status() < 400) return url;
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  });
+  const results = await Promise.all(requests);
+  return results.filter(Boolean);
+}
+
 async function leerSitemap(browser, origen) {
   const candidatos = [
     `${origen.origin}/sitemap.xml`,
@@ -209,16 +253,37 @@ async function extraerEnlacesInternos(page, origen) {
   return Array.from(conjunto);
 }
 
+// React/Vue/Angular gestionan los checkbox via .checked (propiedad DOM)
+// sin tocar el atributo HTML "checked". cheerio.load() lee el HTML
+// serializado: si el atributo no esta presente, devuelve false para
+// is("[checked]") aunque el usuario vea la casilla marcada.
+// Sincronizamos propiedad -> atributo antes de serializar para que la
+// deteccion de pre-marcados funcione en SPAs.
+async function sincronizarCheckedAttr(page) {
+  await page
+    .evaluate(() => {
+      document
+        .querySelectorAll('input[type="checkbox"], input[type="radio"]')
+        .forEach((el) => {
+          if (el.checked) el.setAttribute("checked", "");
+          else el.removeAttribute("checked");
+        });
+    })
+    .catch(() => undefined);
+}
+
 async function abrirYExtraerHtml(browser, url) {
   const page = await context.newPage();
   try {
     await page.goto(url, {
-      waitUntil: "domcontentloaded",
+      waitUntil: "load",
       timeout: TIMEOUT_NAV_MS,
     });
     await page
       .waitForLoadState("networkidle", { timeout: TIMEOUT_NETWORKIDLE_MS })
       .catch(() => undefined);
+    await page.waitForTimeout(1_500);
+    await sincronizarCheckedAttr(page);
     return await page.content();
   } catch {
     return null;
@@ -242,6 +307,7 @@ async function obtenerEnlacesYHtmlHome(browser, url, origen) {
     // dar scores distintos porque a veces el footer alcanza a renderizar
     // y a veces no antes de que extraigamos el HTML.
     await page.waitForTimeout(2_000);
+    await sincronizarCheckedAttr(page);
     const html = await page.content();
     const enlaces = await extraerEnlacesInternos(page, origen);
     const politicaHref = await page
@@ -379,7 +445,12 @@ async function main() {
       await obtenerEnlacesYHtmlHome(browser, url, origen);
 
     const sitemap = await leerSitemap(browser, origen);
-    const candidatas = sitemap.length > 0 ? sitemap : enlaces;
+    // Sondeo en paralelo de paths comunes de formularios. Permite que
+    // /crear-cuenta, /checkout, /login etc. aparezcan como candidatos
+    // incluso si el home (SPA) no los linkea via <a>.
+    const probadas = await sondearPathsComunes(origen);
+    const candidatas =
+      sitemap.length > 0 ? [...sitemap, ...probadas] : [...enlaces, ...probadas];
     const urlNormalizada = normalizarUrl(url);
     const rutasOrdenadas = priorizarRutas(
       Array.from(new Set(candidatas.map(normalizarUrl))).filter(

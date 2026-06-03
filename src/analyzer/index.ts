@@ -141,11 +141,25 @@ const det = {
         resultado.detalles?.push('Las finalidades adicionales no cuentan con mecanismo de negativa independiente disponible para el titular (Guía ANPDP §4.2 + Art. 10.2 DS 016-2024-JUS)')
       }
 
-      const condicionaServicio = /(solo.*si.*acepta|únicamente.*aceptando|no.*podremos.*atender.*si.*no.*acepta.*publicidad|requisito.*aceptar.*marketing)/i.test(t)
+      // Para evitar falsos positivos en politicas largas (los .* del
+      // regex original cruzaban oraciones), partimos el texto por
+      // oracion y exigimos que los tres signos esten en la MISMA
+      // oracion: (1) lenguaje condicional, (2) "acepta", (3) mencion
+      // de marketing/publicidad. Si las tres senales coexisten en una
+      // oracion, es razonable inferir que el servicio se condiciona a
+      // la aceptacion de finalidades adicionales.
+      const oraciones = t.split(/[.!?\n]+/)
+      const condicionaServicio = oraciones.some((s) => {
+        const sLow = s.toLowerCase()
+        const hayCondicional = /(solo\s+si|únicamente\s+si|s[oó]lo\s+si|si\s+no\s+acepta|requisito\s+(?:obligatorio\s+)?(?:para|de)|debes?\s+aceptar|para\s+(?:poder\s+)?(?:usar|acceder|disfrutar|registrarse)|no\s+(?:podemos|podremos|podr[aá]|sera\s+posible)\s+(?:atender|brindar|prestar|registrar))/i.test(sLow)
+        const hayAceptar = /\bacepta(?:r|s|n)?\b/i.test(sLow)
+        const hayMarketing = /(publicidad|marketing|comerciales|promoci[oó]n|env[ií]o\s+de\s+(?:ofertas|comunicaciones))/i.test(sLow)
+        return hayCondicional && hayAceptar && hayMarketing
+      })
       if (condicionaServicio) {
         resultado.cumple = false
         resultado.nivel = 'CONDICIONAMIENTO_ILICITO'
-        resultado.detalles?.push('Se condiciona la prestación del servicio a la aceptación de finalidades adicionales no indispensables (Art. 3.2 DS 016-2024-JUS)')
+        resultado.detalles?.push('Se condiciona la prestación del servicio a la aceptación de finalidades adicionales (marketing/publicidad) no indispensables — práctica prohibida por el Art. 3.2 DS 016-2024-JUS.')
       }
     }
 
