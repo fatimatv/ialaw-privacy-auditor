@@ -2,10 +2,12 @@ import * as cheerio from "cheerio";
 import type { Element } from "domhandler";
 import type {
   CampoFormulario,
+  CheckboxFormulario,
   CookiesBannerDetectado,
   DatosCrawler,
   FormularioDetectado,
   PoliticaPrivacidadDetectada,
+  TipoCheckbox,
 } from "../analyzer/types";
 
 type EvidenciaPublicaEntrada = {
@@ -16,6 +18,24 @@ type EvidenciaPublicaEntrada = {
 
 const TEXTO_POLITICA = /(privacidad|protecci[oó]n de datos|datos personales|privacy)/i;
 const TEXTO_COOKIES = /(cookie|cookies|aceptar|rechazar|configurar|personalizar)/i;
+
+// Clasificadores de checkboxes por proposito. Se aplican al texto
+// asociado al checkbox (label + name) para inferir si es para
+// politica/terminos/marketing.
+const PATRONES_POLITICA_CHECKBOX = /(privacidad|protecci[oó]n\s+de\s+datos|datos\s+personales|tratamiento\s+de\s+mis\s+datos|aviso\s+de\s+privacidad|privacy)/i;
+const PATRONES_TERMINOS_CHECKBOX = /(t[eé]rminos|condiciones|condiciones\s+generales|terms)/i;
+const PATRONES_MARKETING_CHECKBOX = /(marketing|publicidad|promoci[oó]n|ofertas|comunicaciones?\s+comerciales|comerciales?|newsletter|bolet[ií]n|recibir\s+(informaci[oó]n|ofertas|novedades|promociones|comunicaciones)|env[ií]o.*(comercial|promocional)|suscribi[a-zñ]+\s+a)/i;
+
+// Senales de que un formulario solicita datos para finalidades
+// adicionales (marketing/publicidad).
+const CONTEXTO_MARKETING_FORM = /(marketing|publicidad|promoci[oó]n|ofertas|newsletter|bolet[ií]n|suscri[bp][a-zñ]+|recibir\s+(?:informaci[oó]n|ofertas|novedades|promociones)|env[ií]o.*(?:comercial|promocional))/i;
+
+function clasificarTipoCheckbox(texto: string): TipoCheckbox {
+  if (PATRONES_POLITICA_CHECKBOX.test(texto)) return "POLITICA_PRIVACIDAD";
+  if (PATRONES_MARKETING_CHECKBOX.test(texto)) return "MARKETING_PUBLICIDAD";
+  if (PATRONES_TERMINOS_CHECKBOX.test(texto)) return "TERMINOS_CONDICIONES";
+  return "OTRO";
+}
 
 // Selectores conocidos de Consent Management Platforms. Capturan banners
 // inyectados por OneTrust, Cookiebot, Didomi, CookieYes, Quantcast,
@@ -119,6 +139,76 @@ function extraerCampos($: cheerio.CheerioAPI, formulario: Element): CampoFormula
     });
 }
 
+function extraerLabelCheckbox(
+  $: cheerio.CheerioAPI,
+  checkbox: Element,
+): string {
+  const el = $(checkbox);
+  // 1) <label for="id">…</label> apuntando al checkbox.
+  const id = el.attr("id");
+  if (id) {
+    const label = $("label")
+      .toArray()
+      .find((lab) => $(lab).attr("for") === id);
+    if (label) {
+      const t = textoNormalizado($(label).text());
+      if (t.length > 0) return t;
+    }
+  }
+  // 2) <label> ancestro envolvente.
+  const labelEnvolvente = el.closest("label");
+  if (labelEnvolvente.length > 0) {
+    const t = textoNormalizado(labelEnvolvente.text());
+    if (t.length > 0) return t;
+  }
+  // 3) Texto del contenedor inmediato (li, p, div pequeño).
+  const padre = el.parent();
+  if (padre.length > 0) {
+    const t = textoNormalizado(padre.text());
+    if (t.length > 0 && t.length < 600) return t;
+  }
+  return "";
+}
+
+function extraerCheckboxesDetallados(
+  $: cheerio.CheerioAPI,
+  formulario: Element,
+): CheckboxFormulario[] {
+  return $(formulario)
+    .find("input[type='checkbox']")
+    .toArray()
+    .map((checkbox) => {
+      const el = $(checkbox);
+      const label = extraerLabelCheckbox($, checkbox);
+      const name = el.attr("name") ?? "";
+      const tipo = clasificarTipoCheckbox(`${label} ${name}`);
+      return {
+        label,
+        premarcado: el.is("[checked]"),
+        tipo,
+      };
+    });
+}
+
+function detectarContextoMarketing(
+  paginaOrigen: string,
+  textoFormulario: string,
+  campos: CampoFormulario[],
+): boolean {
+  if (CONTEXTO_MARKETING_FORM.test(paginaOrigen)) return true;
+  if (CONTEXTO_MARKETING_FORM.test(textoFormulario)) return true;
+  for (const c of campos) {
+    if (
+      CONTEXTO_MARKETING_FORM.test(
+        `${c.name ?? ""} ${c.placeholder ?? ""} ${c.label ?? ""}`,
+      )
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function extraerFormularios($: cheerio.CheerioAPI, url: string): FormularioDetectado[] {
   return $("form")
     .toArray()
@@ -127,19 +217,31 @@ function extraerFormularios($: cheerio.CheerioAPI, url: string): FormularioDetec
       const campos = extraerCampos($, formulario);
       const textoFormulario = textoNormalizado(form.text());
       const paginaOrigen = resolverUrl(url, form.attr("action")) ?? url;
-      const checkboxes = form.find("input[type='checkbox']");
+      const checkboxes = extraerCheckboxesDetallados($, formulario);
+      const contextoMarketing = detectarContextoMarketing(paginaOrigen, textoFormulario, campos);
+
+      // Back-compat: estos dos booleanos se computan ahora desde la
+      // lista detallada para que los detectores existentes (B.1..B.4)
+      // sigan funcionando sin tocarlos.
+      const tieneCheckboxConsentimiento = checkboxes.some(
+        (c) => c.tipo === "POLITICA_PRIVACIDAD" || c.tipo === "TERMINOS_CONDICIONES",
+      );
+      // Si no hay match en el label pero el texto general del form
+      // habla de politica de privacidad y hay algun checkbox, mantenemos
+      // la heuristica original (texto del form menciona politica).
+      const tieneCheckboxConsentimientoFallback = checkboxes.length > 0 && TEXTO_POLITICA.test(textoFormulario);
 
       return {
         pagina_origen: paginaOrigen,
-        checkbox_premarcado: checkboxes.toArray().some((checkbox) => $(checkbox).is("[checked]")),
-        tiene_checkbox_consentimiento: checkboxes
-          .toArray()
-          .some((checkbox) => TEXTO_POLITICA.test(`${textoFormulario} ${$(checkbox).attr("name") ?? ""}`)),
+        checkbox_premarcado: checkboxes.some((c) => c.premarcado),
+        tiene_checkbox_consentimiento: tieneCheckboxConsentimiento || tieneCheckboxConsentimientoFallback,
         tiene_link_politica: form
           .find("a")
           .toArray()
           .some((link) => TEXTO_POLITICA.test(`${$(link).text()} ${$(link).attr("href") ?? ""}`)),
         campos,
+        checkboxes,
+        contexto_marketing: contextoMarketing,
       };
     });
 }

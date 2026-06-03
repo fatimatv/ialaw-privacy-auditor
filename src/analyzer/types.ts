@@ -12,12 +12,30 @@ export type CampoFormulario = {
   required?: boolean;
 };
 
+export type TipoCheckbox =
+  | "POLITICA_PRIVACIDAD"
+  | "TERMINOS_CONDICIONES"
+  | "MARKETING_PUBLICIDAD"
+  | "OTRO";
+
+export type CheckboxFormulario = {
+  /** Texto asociado al checkbox (label, parent, span vecino). */
+  label: string;
+  premarcado: boolean;
+  /** Clasificacion del proposito del checkbox segun su label. */
+  tipo: TipoCheckbox;
+};
+
 export type FormularioDetectado = {
   pagina_origen: string;
   checkbox_premarcado: boolean;
   tiene_checkbox_consentimiento: boolean;
   tiene_link_politica: boolean;
   campos: CampoFormulario[];
+  /** Lista de checkboxes con su label y tipo inferido. Detalle B.5. */
+  checkboxes?: CheckboxFormulario[];
+  /** El formulario contiene senales de captacion para finalidades adicionales/marketing. */
+  contexto_marketing?: boolean;
 };
 
 export type PoliticaPrivacidadDetectada = {

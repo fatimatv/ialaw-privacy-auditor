@@ -68,6 +68,38 @@ describe("extraerEvidenciaPublica", () => {
     expect(r.cookies_banner.texto).toMatch(/CMP detectada por script/);
   });
 
+  it("clasifica checkboxes individuales por label (politica vs marketing) y detecta contexto de marketing", () => {
+    const html = `
+      <html><body>
+        <form action="/newsletter/suscribirse">
+          <input name="email" />
+          <label><input type="checkbox" name="acepto_politica"> Acepto la política de privacidad</label>
+          <label><input type="checkbox" name="acepto_marketing"> Quiero recibir ofertas y promociones</label>
+        </form>
+      </body></html>
+    `;
+    const r = extraerEvidenciaPublica({ url: "https://example.com", html });
+    const form = r.formularios[0];
+    expect(form?.contexto_marketing).toBe(true);
+    expect(form?.checkboxes?.length).toBe(2);
+    const tipos = form?.checkboxes?.map((c) => c.tipo).sort();
+    expect(tipos).toEqual(["MARKETING_PUBLICIDAD", "POLITICA_PRIVACIDAD"]);
+  });
+
+  it("marca contexto_marketing=false cuando el formulario es solo de contacto", () => {
+    const html = `
+      <html><body>
+        <form action="/contacto">
+          <input name="nombre" />
+          <input name="email" />
+          <label><input type="checkbox"> Acepto la política de privacidad</label>
+        </form>
+      </body></html>
+    `;
+    const r = extraerEvidenciaPublica({ url: "https://example.com", html });
+    expect(r.formularios[0]?.contexto_marketing).toBe(false);
+  });
+
   it("detecta banner Cookiebot", () => {
     const html = `
       <html>

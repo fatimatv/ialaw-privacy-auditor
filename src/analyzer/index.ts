@@ -398,6 +398,22 @@ const detForm = {
     )
   },
 
+  // B.5 — Marketing/publicidad sin checkbox separado
+  // El formulario declara contexto de marketing/publicidad (en pagina_origen,
+  // texto del form, o campos como "newsletter"/"suscripcion") pero no tiene
+  // un checkbox SEPARADO con label de marketing/publicidad. La normativa
+  // exige consentimiento independiente para las finalidades adicionales:
+  // Art. 18 Ley 29733 + Art. 5 + Art. 10.2 DS 016-2024-JUS + Guia ANPDP §4.2.
+  marketingSinCheckboxSeparado(formularios: FormularioDetectado[]): FormularioDetectado[] {
+    return formularios.filter((f) => {
+      if (!f.contexto_marketing) return false
+      const tieneMarketing = (f.checkboxes ?? []).some(
+        (c) => c.tipo === 'MARKETING_PUBLICIDAD',
+      )
+      return !tieneMarketing
+    })
+  },
+
   // B.4 — Campos posiblemente excesivos para la finalidad aparente
   datosExcesivos(formularios: FormularioDetectado[]): DatoExcesivoDetectado[] {
     const alertas: DatoExcesivoDetectado[] = []
@@ -877,6 +893,27 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
       riesgo_infraccion: 'leve',
       base_infraccion: 'Art. 132.5 DS 016-2024-JUS',
       recomendacion: 'Incluir un enlace visible a la política de privacidad completa en o junto a cada formulario de captación.'
+    })
+  }
+
+  const formsMarketingSinCheckbox = detForm.marketingSinCheckboxSeparado(formularios)
+  if (formsMarketingSinCheckbox.length > 0) {
+    observaciones.push({
+      id: `OBS-${String(observaciones.length + 1).padStart(2, '0')}`,
+      modulo: 'B',
+      categoria: 'Marketing/publicidad sin checkbox de consentimiento independiente',
+      severidad: 'IMPORTANTE',
+      hallazgo: `${formsMarketingSinCheckbox.length} formulario(s) con contexto de marketing, publicidad o suscripcion no tienen un checkbox separado para el consentimiento de la finalidad adicional. El titular no puede aceptar la finalidad principal del formulario sin aceptar, en bloque, la finalidad de marketing.`,
+      evidencia: `Formularios afectados: ${formsMarketingSinCheckbox.map((f) => f.pagina_origen).join(', ')}`,
+      norma_vulnerada: 'Art. 18 Ley 29733 + Art. 5 (consentimiento expreso e inequivoco) + Art. 10.2 DS 016-2024-JUS + Guia ANPDP sobre el Deber de Informar §4.2',
+      riesgo_infraccion: 'leve',
+      base_infraccion: 'Art. 132.5 DS 016-2024-JUS',
+      recomendacion: 'Implementar un checkbox separado (no pre-marcado) para el consentimiento de marketing/publicidad, independiente del consentimiento de la politica de privacidad. El titular debe poder aceptar la finalidad principal del formulario sin verse obligado a aceptar las finalidades adicionales.',
+      detalles: formsMarketingSinCheckbox.map((f) => {
+        const cs = (f.checkboxes ?? []).filter((c) => c.tipo !== 'OTRO')
+        const enc = cs.map((c) => c.tipo.replace('_', ' ').toLowerCase()).join(', ') || 'ninguno con label clasificable'
+        return `Formulario ${f.pagina_origen}: ${(f.checkboxes ?? []).length} checkbox(es) detectado(s) — clasificados como: ${enc}. No se encontro checkbox con label de marketing/publicidad.`
+      }),
     })
   }
 
