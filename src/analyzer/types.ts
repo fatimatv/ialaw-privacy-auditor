@@ -2,8 +2,7 @@ export type Severidad =
   | "MUY GRAVE"
   | "GRAVE"
   | "IMPORTANTE"
-  | "MODERADA"
-  | "BAJA";
+  | "MODERADA";
 
 export type CampoFormulario = {
   name?: string;

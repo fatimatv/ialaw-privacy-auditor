@@ -18,7 +18,6 @@ const severidadColor: Record<string, string> = {
   GRAVE: "bg-red-100 text-red-950",
   IMPORTANTE: "bg-amber-100 text-stone-950",
   MODERADA: "bg-blue-100 text-blue-950",
-  BAJA: "bg-zinc-100 text-zinc-700",
 };
 
 export default function Home() {
@@ -28,7 +27,10 @@ export default function Home() {
   const [cargando, setCargando] = useState(false);
   const [descargandoPdf, setDescargandoPdf] = useState(false);
 
-  const observaciones = resultado?.resultado.observaciones ?? [];
+  const observaciones = useMemo(
+    () => resultado?.resultado.observaciones ?? [],
+    [resultado],
+  );
   const conteo = useMemo(() => {
     return observaciones.reduce<Record<string, number>>((acc, observacion) => {
       acc[observacion.severidad] = (acc[observacion.severidad] ?? 0) + 1;
