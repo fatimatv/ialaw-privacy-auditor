@@ -35,6 +35,21 @@ function renderRiesgo(observacion: { riesgo_infraccion?: string; rango_multa_apl
   return partes.join("");
 }
 
+function renderDetalles(detalles?: string[]): string {
+  if (!detalles || detalles.length === 0) return "";
+  return `
+    <p><strong>Detalle de sub-elementos:</strong></p>
+    <ul class="sub-elementos">
+      ${detalles.map((d) => `<li>${escaparHtml(d)}</li>`).join("")}
+    </ul>
+  `;
+}
+
+function renderNivelTecnico(nivel?: string): string {
+  if (!nivel) return "";
+  return `<p class="nivel-tecnico"><strong>Nivel tecnico:</strong> <code>${escaparHtml(nivel)}</code></p>`;
+}
+
 export type LogosReporte = {
   /** Logo vertical para la portada del PDF. Acepta data: URI o URL absoluta. */
   vertical?: string;
@@ -67,19 +82,49 @@ export function crearHtmlReporte(resultado: ResultadoAuditoria, logos: LogosRepo
             <span class="severity">${escaparHtml(observacion.severidad)}</span>
           </div>
           <p><strong>Hallazgo:</strong> ${escaparHtml(observacion.hallazgo)}</p>
+          ${renderDetalles(observacion.detalles)}
           <p><strong>Evidencia:</strong> ${escaparHtml(observacion.evidencia)}</p>
           <p><strong>Norma vulnerada:</strong> ${escaparHtml(observacion.norma_vulnerada)}</p>
           <p><strong>Base infraccion:</strong> ${escaparHtml(observacion.base_infraccion)}</p>
           ${renderRiesgo(observacion)}
           <p><strong>Recomendacion:</strong> ${escaparHtml(observacion.recomendacion)}</p>
+          ${renderNivelTecnico(observacion.nivel)}
         </article>
       `
     )
     .join("");
 
-  const cumplidos = resultado.elementos_cumplidos.map((item) => `<li>${escaparHtml(item)}</li>`).join("");
+  const cumplidos = resultado.elementos_cumplidos
+    .map(
+      (item) => `
+        <article class="compliance">
+          <div class="compliance-header">
+            <h3>${escaparHtml(item.categoria)}</h3>
+            <span class="ok-badge">CUMPLE</span>
+          </div>
+          <p><strong>Norma:</strong> ${escaparHtml(item.norma)}</p>
+          <p><strong>Evidencia detectada:</strong> ${escaparHtml(item.evidencia_detectada)}</p>
+        </article>
+      `,
+    )
+    .join("");
   const trackers = resultado.trackers_detectados.map((item) => `<li>${escaparHtml(item)}</li>`).join("");
   const advertencias = resultado.advertencias_metodologicas.map((item) => `<li>${escaparHtml(item)}</li>`).join("");
+
+  const m = resultado.metodologia_calificacion;
+  const filasDeducciones = m.deducciones
+    .map(
+      (d) => `
+        <tr>
+          <td>${escaparHtml(d.severidad)}</td>
+          <td>−${escaparHtml(d.penalidad_unitaria)}</td>
+          <td>${escaparHtml(d.cantidad)}</td>
+          <td>−${escaparHtml(d.deduccion_total)}</td>
+        </tr>
+      `,
+    )
+    .join("");
+  const cdi = m.clasificacion_deber_informar;
 
   return `<!doctype html>
 <html lang="es">
@@ -213,6 +258,83 @@ export function crearHtmlReporte(resultado: ResultadoAuditoria, logos: LogosRepo
         padding: 12px;
         color: #374151;
       }
+      .sub-elementos {
+        margin: 6px 0 12px 0;
+        padding-left: 22px;
+        color: #374151;
+      }
+      .sub-elementos li {
+        margin-bottom: 4px;
+      }
+      .nivel-tecnico {
+        margin-top: 8px;
+        color: #6F7072;
+        font-size: 10px;
+      }
+      .nivel-tecnico code {
+        background: #f4f6fb;
+        padding: 1px 6px;
+        border: 1px solid #dfe3ef;
+        font-family: "Courier New", monospace;
+        font-size: 10px;
+      }
+      .compliance {
+        page-break-inside: avoid;
+        margin: 0 0 12px;
+        padding: 14px;
+        border: 1px solid #c8d6c8;
+        background: #f6fbf6;
+      }
+      .compliance-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 6px;
+      }
+      .ok-badge {
+        background: #1f9d55;
+        color: #ffffff;
+        padding: 4px 8px;
+        font-size: 10px;
+        font-weight: 900;
+        text-transform: uppercase;
+        white-space: nowrap;
+      }
+      .metodologia table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 10px 0;
+        font-size: 11px;
+      }
+      .metodologia th, .metodologia td {
+        text-align: left;
+        padding: 8px 10px;
+        border-bottom: 1px solid #dfe3ef;
+      }
+      .metodologia thead th {
+        background: #f4f6fb;
+        color: #011EF4;
+        font-weight: 900;
+        text-transform: uppercase;
+        font-size: 10px;
+      }
+      .metodologia .total-row {
+        font-weight: 900;
+        background: #fff8df;
+      }
+      .metodologia .total-row td {
+        border-bottom: 2px solid #FBBB02;
+      }
+      .formula {
+        background: #f4f6fb;
+        padding: 12px;
+        border-left: 4px solid #011EF4;
+        margin: 10px 0;
+        font-family: "Courier New", monospace;
+        font-size: 11px;
+        color: #111827;
+      }
     </style>
   </head>
   <body>
@@ -242,6 +364,36 @@ export function crearHtmlReporte(resultado: ResultadoAuditoria, logos: LogosRepo
       <p class="disclaimer">${DISCLAIMER_REPORTE}</p>
     </section>
 
+    <section class="section metodologia">
+      <h2>Metodologia de calificacion</h2>
+      <p class="formula">${escaparHtml(m.formula_texto)}</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Severidad</th>
+            <th>Penalidad unitaria</th>
+            <th>Observaciones</th>
+            <th>Deduccion</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${filasDeducciones}
+          <tr class="total-row">
+            <td colspan="3">Puntaje base 100 − total de deducciones (${escaparHtml(m.deduccion_total)})</td>
+            <td>${escaparHtml(m.puntaje_final)} / 100</td>
+          </tr>
+        </tbody>
+      </table>
+      <p style="margin-top: 14px;"><strong>Clasificacion del deber de informar (Art. 132.5 vs 133.2 DS 016-2024-JUS):</strong></p>
+      <p>${escaparHtml(cdi.criterio)}</p>
+      <p>
+        <strong>Resultado de esta auditoria:</strong>
+        ${escaparHtml(cdi.elementos_faltantes_art18)} elemento(s) faltante(s) del Art. 18
+        → infraccion <strong>${escaparHtml(cdi.clasificacion)}</strong>
+        (${escaparHtml(cdi.norma_aplicable)}, rango de multa: ${escaparHtml(cdi.rango_multa)}).
+      </p>
+    </section>
+
     <section class="section">
       <h2>Observaciones</h2>
       ${observaciones || "<p>No se registraron observaciones.</p>"}
@@ -249,7 +401,7 @@ export function crearHtmlReporte(resultado: ResultadoAuditoria, logos: LogosRepo
 
     <section class="section">
       <h2>Elementos cumplidos</h2>
-      <ul>${cumplidos || "<li>No se registraron elementos cumplidos.</li>"}</ul>
+      ${cumplidos || "<p>No se registraron elementos cumplidos.</p>"}
     </section>
 
     <section class="section">

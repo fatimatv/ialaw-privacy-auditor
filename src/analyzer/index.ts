@@ -3,12 +3,17 @@
 // Sin dependencia de API externa
 
 import type {
+  CalculoPuntaje,
+  ClasificacionDeberInformar,
   CookiesBannerDetectado,
   DatosCrawler,
+  DeduccionPuntaje,
+  ElementoCumplido,
   FormularioDetectado,
   Observacion,
   PoliticaPrivacidadDetectada,
   ResultadoAuditoria,
+  Severidad,
 } from './types'
 
 type ResultadoDetector = {
@@ -899,31 +904,145 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
       })
   }
 
+  // ── ENRIQUECIMIENTO DE OBSERVACIONES ──
+  // Cada detector del modulo A devuelve `nivel` (codigo tecnico) y
+  // `detalles` (mensajes legibles por sub-elemento que fallo). Hacemos
+  // un post-pass que vincula esos datos a cada observacion ya pusheada
+  // por categoria, para que el reporte muestre el por que concreto en
+  // lugar de un codigo tipo "SIN_REVOCACION+SIN_REFERENCIA_ANPDP".
+  const detectorPorCategoria: Record<string, { detalles?: string[]; nivel?: string }> = {
+    'Identidad y domicilio del responsable': detectores.identidad,
+    'Finalidad del tratamiento': detectores.finalidad,
+    'Destinatarios de los datos': detectores.destinatarios,
+    'Transferencia internacional de datos': detectores.transferencia,
+    'Banco de datos personales': detectores.bancoDatos,
+    'Carácter obligatorio o facultativo de los datos': detectores.obligatoriedad,
+    'Consecuencias de proporcionar o negar los datos': detectores.consecuencias,
+    'Plazo de conservación de datos': detectores.plazo,
+    'Derechos ARCO y mecanismos de ejercicio': detectores.arco,
+    'Decisiones automatizadas y perfilamiento': detectores.automatizadas,
+    'Calidad del lenguaje y forma': detectores.lenguaje,
+  }
+  for (const obs of observaciones) {
+    const det = detectorPorCategoria[obs.categoria]
+    if (!det) continue
+    if (det.nivel) obs.nivel = det.nivel
+    if (det.detalles && det.detalles.length > 0) obs.detalles = det.detalles.slice()
+  }
+
   // ── PUNTAJE Y RESUMEN ──
-  const contMuyGrave = observaciones.filter(o => o.severidad === 'MUY GRAVE').length
-  const contGrave = observaciones.filter(o => o.severidad === 'GRAVE').length
-  const contImportante = observaciones.filter(o => o.severidad === 'IMPORTANTE').length
-  const contModerada = observaciones.filter(o => o.severidad === 'MODERADA').length
+  // Formula transparente: el reporte expone esta tabla para que el
+  // cliente pueda reconstruir el calculo manualmente.
+  const PENALIDADES_POR_SEVERIDAD: Record<Severidad, number> = {
+    'MUY GRAVE': 25,
+    GRAVE: 15,
+    IMPORTANTE: 7,
+    MODERADA: 3,
+  }
+  const severidadesOrdenadas: Severidad[] = ['MUY GRAVE', 'GRAVE', 'IMPORTANTE', 'MODERADA']
+  const deducciones: DeduccionPuntaje[] = severidadesOrdenadas.map((severidad) => {
+    const cantidad = observaciones.filter((o) => o.severidad === severidad).length
+    const penalidad_unitaria = PENALIDADES_POR_SEVERIDAD[severidad]
+    return {
+      severidad,
+      penalidad_unitaria,
+      cantidad,
+      deduccion_total: cantidad * penalidad_unitaria,
+    }
+  })
+  const deduccion_total = deducciones.reduce((acc, d) => acc + d.deduccion_total, 0)
+  const puntaje = Math.max(0, 100 - deduccion_total)
 
-  let puntaje = 100
-    - (contMuyGrave * 25)
-    - (contGrave * 15)
-    - (contImportante * 7)
-    - (contModerada * 3)
-  puntaje = Math.max(0, puntaje)
+  const contMuyGrave = deducciones.find((d) => d.severidad === 'MUY GRAVE')?.cantidad ?? 0
+  const contGrave = deducciones.find((d) => d.severidad === 'GRAVE')?.cantidad ?? 0
+  const contImportante = deducciones.find((d) => d.severidad === 'IMPORTANTE')?.cantidad ?? 0
+  const contModerada = deducciones.find((d) => d.severidad === 'MODERADA')?.cantidad ?? 0
 
-  const elementosCumplidos = []
-  if (detectores.identidad.cumple) elementosCumplidos.push('Identidad y domicilio del responsable declarados (Art. 18 Ley 29733)')
-  if (detectores.finalidad.cumple) elementosCumplidos.push('Finalidades del tratamiento declaradas (Art. 7 + 18 Ley 29733)')
-  if (detectores.destinatarios.cumple) elementosCumplidos.push('Destinatarios identificados (Art. 18 Ley 29733)')
-  if (detectores.plazo.cumple) elementosCumplidos.push('Plazo de conservación indicado (Art. 18 Ley 29733)')
-  if (detectores.arco.cumple) elementosCumplidos.push('Derechos ARCO con canal de ejercicio informados (Art. 18-19 Ley 29733)')
-  if (formularios.every(f => !f.checkbox_premarcado)) elementosCumplidos.push('No se detectaron checkboxes pre-marcados')
+  const clasificacionDeberInformar: ClasificacionDeberInformar = clasificacion
+    ? {
+        elementos_faltantes_art18: contadorElementosFaltantesArt18,
+        clasificacion: clasificacion.tipo,
+        norma_aplicable: clasificacion.articulo,
+        rango_multa: clasificacion.rango_multa,
+        criterio:
+          'Art. 132.5 DS 016-2024-JUS (LEVE) si faltan 1-2 condiciones del Art. 18 Ley 29733; Art. 133.2 DS 016-2024-JUS (GRAVE) si faltan 3 o mas.',
+      }
+    : {
+        elementos_faltantes_art18: 0,
+        clasificacion: 'NO_APLICA',
+        norma_aplicable: '—',
+        rango_multa: '—',
+        criterio:
+          'No se detectaron elementos faltantes del Art. 18 Ley 29733; no aplica la clasificacion del deber de informar.',
+      }
+
+  const metodologia_calificacion: CalculoPuntaje = {
+    base: 100,
+    deducciones,
+    deduccion_total,
+    puntaje_final: puntaje,
+    formula_texto:
+      'Puntaje = 100 − Σ(observaciones × penalidad por severidad). Penalidades: MUY GRAVE −25, GRAVE −15, IMPORTANTE −7, MODERADA −3. Limite inferior 0.',
+    clasificacion_deber_informar: clasificacionDeberInformar,
+  }
+
+  // ── ELEMENTOS CUMPLIDOS ──
+  // Estructurados como objetos con norma y evidencia para mostrarlos
+  // en el reporte con el mismo nivel de detalle que las observaciones.
+  const elementosCumplidos: ElementoCumplido[] = []
+  if (detectores.identidad.cumple) {
+    elementosCumplidos.push({
+      categoria: 'Identidad y domicilio del responsable',
+      norma: 'Art. 18 Ley 29733 + Art. 6.1.1 DS 016-2024-JUS',
+      evidencia_detectada:
+        'Se identificaron razón social/denominación, RUC (cuando aplica) y domicilio con los componentes minimos (via/frase de domicilio + numero o distrito) exigidos por la Guia ANPDP §4.1.',
+    })
+  }
+  if (detectores.finalidad.cumple) {
+    elementosCumplidos.push({
+      categoria: 'Finalidad del tratamiento',
+      norma: 'Art. 7 + Art. 18 Ley 29733',
+      evidencia_detectada:
+        'La politica declara finalidades especificas, no usa formulas genericas prohibidas por la Guia ANPDP §4.2 y, cuando hay finalidades adicionales, distingue su mecanismo de consentimiento.',
+    })
+  }
+  if (detectores.destinatarios.cumple) {
+    elementosCumplidos.push({
+      categoria: 'Destinatarios de los datos',
+      norma: 'Art. 18 Ley 29733 + Art. 6.1.3 DS 016-2024-JUS',
+      evidencia_detectada:
+        'La politica identifica destinatarios o declara expresamente que no se transfieren datos a terceros.',
+    })
+  }
+  if (detectores.plazo.cumple) {
+    elementosCumplidos.push({
+      categoria: 'Plazo de conservación de datos',
+      norma: 'Art. 18 Ley 29733 + Art. 6.1.9 DS 016-2024-JUS',
+      evidencia_detectada:
+        'La politica indica un plazo determinado o un criterio determinable de conservacion de los datos.',
+    })
+  }
+  if (detectores.arco.cumple) {
+    elementosCumplidos.push({
+      categoria: 'Derechos ARCO y mecanismos de ejercicio',
+      norma: 'Art. 18-19 Ley 29733 + Art. 6.1.10 DS 016-2024-JUS',
+      evidencia_detectada:
+        'La politica describe los derechos ARCO, ofrece un canal verificable para ejercerlos, informa la revocacion del consentimiento y menciona a la ANPDP como autoridad de tutela.',
+    })
+  }
+  if (formularios.length > 0 && formularios.every((f) => !f.checkbox_premarcado)) {
+    elementosCumplidos.push({
+      categoria: 'Consentimiento activo en formularios',
+      norma: 'Art. 5 DS 016-2024-JUS',
+      evidencia_detectada:
+        'Ningun formulario de captacion presenta checkboxes pre-marcados (consentimiento pasivo no valido).',
+    })
+  }
 
   return {
     sitio: url_auditada,
     fecha_auditoria: new Date().toISOString(),
-    resumen_ejecutivo: `Auditoría de cumplimiento bajo Ley N° 29733 y DS N° 016-2024-JUS. Se identificaron ${observaciones.length} observaciones: ${contGrave} grave(s), ${contImportante} importante(s), ${contModerada} moderada(s). Puntaje de cumplimiento: ${puntaje}/100.`,
+    resumen_ejecutivo: `Auditoría de cumplimiento bajo Ley N° 29733 y DS N° 016-2024-JUS. Se identificaron ${observaciones.length} observaciones: ${contMuyGrave} muy grave(s), ${contGrave} grave(s), ${contImportante} importante(s), ${contModerada} moderada(s). Puntaje de cumplimiento: ${puntaje}/100.`,
     puntaje_cumplimiento: puntaje,
     elementos_faltantes_art18: contadorElementosFaltantesArt18,
     clasificacion_deber_informar: clasificacion,
@@ -936,6 +1055,7 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
       'Las observaciones sobre datos sensibles y proporcionalidad requieren verificación manual del auditor.',
       'Los trackers detectados en el HTML son indicativos, no determinantes de una infracción confirmada.',
       'La coherencia entre política declarada y prácticas internas requiere auditoría documental adicional.'
-    ]
+    ],
+    metodologia_calificacion,
   }
 }

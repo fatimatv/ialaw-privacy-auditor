@@ -214,6 +214,51 @@ export default function Home() {
           {resultado && (
             <>
               <section className="border border-[#dfe3ef] bg-white p-5">
+                <h2 className="text-sm font-black uppercase tracking-wide text-[#011EF4]">Metodología de calificación</h2>
+                <p className="mt-3 border-l-4 border-[#011EF4] bg-[#f4f6fb] p-3 font-mono text-xs text-[#111827]">
+                  {resultado.resultado.metodologia_calificacion.formula_texto}
+                </p>
+                <table className="mt-4 w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-[#dfe3ef] text-left text-xs uppercase text-[#011EF4]">
+                      <th className="py-2 font-black">Severidad</th>
+                      <th className="py-2 font-black">Penalidad</th>
+                      <th className="py-2 font-black">Cantidad</th>
+                      <th className="py-2 font-black">Deducción</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {resultado.resultado.metodologia_calificacion.deducciones.map((d) => (
+                      <tr key={d.severidad} className="border-b border-[#e6e9f2]">
+                        <td className="py-2">{d.severidad}</td>
+                        <td className="py-2">−{d.penalidad_unitaria}</td>
+                        <td className="py-2">{d.cantidad}</td>
+                        <td className="py-2">−{d.deduccion_total}</td>
+                      </tr>
+                    ))}
+                    <tr className="bg-[#fff8df] font-black">
+                      <td className="py-2" colSpan={3}>
+                        Puntaje base 100 − total de deducciones ({resultado.resultado.metodologia_calificacion.deduccion_total})
+                      </td>
+                      <td className="py-2">{resultado.resultado.metodologia_calificacion.puntaje_final} / 100</td>
+                    </tr>
+                  </tbody>
+                </table>
+                <p className="mt-4 text-xs text-[#6F7072]">
+                  <strong>Clasificación del deber de informar:</strong>{" "}
+                  {resultado.resultado.metodologia_calificacion.clasificacion_deber_informar.criterio}
+                </p>
+                <p className="mt-2 text-xs text-[#6F7072]">
+                  <strong>Resultado en esta auditoría:</strong>{" "}
+                  {resultado.resultado.metodologia_calificacion.clasificacion_deber_informar.elementos_faltantes_art18}{" "}
+                  elemento(s) faltante(s) del Art. 18 → infracción{" "}
+                  <strong>{resultado.resultado.metodologia_calificacion.clasificacion_deber_informar.clasificacion}</strong>{" "}
+                  ({resultado.resultado.metodologia_calificacion.clasificacion_deber_informar.norma_aplicable}, rango de multa:{" "}
+                  {resultado.resultado.metodologia_calificacion.clasificacion_deber_informar.rango_multa}).
+                </p>
+              </section>
+
+              <section className="border border-[#dfe3ef] bg-white p-5">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <h2 className="text-sm font-black uppercase tracking-wide text-[#011EF4]">Observaciones</h2>
                   <div className="flex flex-wrap gap-2">
@@ -240,6 +285,13 @@ export default function Home() {
                         </span>
                       </div>
                       <p className="mt-3 text-sm leading-6 text-[#374151]">{observacion.hallazgo}</p>
+                      {observacion.detalles && observacion.detalles.length > 0 && (
+                        <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-[#374151]">
+                          {observacion.detalles.map((d, idx) => (
+                            <li key={idx}>{d}</li>
+                          ))}
+                        </ul>
+                      )}
                       <p className="mt-3 border-l-4 border-[#FBBB02] bg-[#fff8df] p-3 text-sm text-[#374151]">
                         {observacion.evidencia}
                       </p>
@@ -252,9 +304,11 @@ export default function Home() {
                 <div className="border border-[#dfe3ef] bg-white p-5">
                   <h2 className="text-sm font-black uppercase tracking-wide text-[#011EF4]">Elementos cumplidos</h2>
                   <ul className="mt-4 space-y-3 text-sm leading-6 text-[#374151]">
-                    {resultado.resultado.elementos_cumplidos.map((item) => (
-                      <li key={item} className="border-l-4 border-[#011EF4] pl-3">
-                        {item}
+                    {resultado.resultado.elementos_cumplidos.map((item, idx) => (
+                      <li key={idx} className="border-l-4 border-[#1f9d55] pl-3">
+                        <strong>{item.categoria}</strong>
+                        <div className="mt-1 text-xs text-[#6F7072]">{item.norma}</div>
+                        <div className="mt-1">{item.evidencia_detectada}</div>
                       </li>
                     ))}
                   </ul>
