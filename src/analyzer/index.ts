@@ -77,7 +77,7 @@ const det = {
     if (!tieneNombre) {
       resultado.cumple = false
       resultado.nivel = 'SIN_RAZON_SOCIAL'
-      resultado.detalles?.push('No se identifica la razón social o denominación del responsable')
+      resultado.detalles?.push('No se identifica la razón social o denominación del responsable (Art. 18 párr. 1 Ley 29733 + Art. 6.1.1 DS 016-2024-JUS + Guía ANPDP sobre el Deber de Informar §4.1).')
     }
     if (!tieneRUC && tieneNombre) {
       resultado.alerta_ruc = true
@@ -86,7 +86,7 @@ const det = {
     if (!tieneDomicilioCompleto) {
       resultado.cumple = false
       resultado.nivel = resultado.nivel || 'DOMICILIO_INCOMPLETO'
-      resultado.detalles?.push('El domicilio no incluye los componentes mínimos: vía (calle/av/jr), número y distrito/provincia (Guía ANPDP §4.1)')
+      resultado.detalles?.push('El domicilio no incluye los componentes mínimos: vía (calle/av/jr) o frase introductoria de domicilio + número y distrito/provincia (Art. 18 Ley 29733 + Art. 6.1.1 DS 016-2024-JUS + Guía ANPDP sobre el Deber de Informar §4.1).')
     }
     if (pareceExtranjero && !tieneRepresentante) {
       resultado.alerta_representante = true
@@ -100,7 +100,7 @@ const det = {
     const resultado: ResultadoDetector = { cumple: true, detalles: [] }
     const tieneFinalidad = /(finalidad|objetivo del tratamiento|para qué|propósito|usamos tus datos para|tratamos tus datos para)/i.test(t)
     if (!tieneFinalidad) {
-      return { cumple: false, nivel: 'AUSENCIA_TOTAL', detalles: ['No se declara ninguna finalidad del tratamiento'] }
+      return { cumple: false, nivel: 'AUSENCIA_TOTAL', detalles: ['No se declara ninguna finalidad del tratamiento (Art. 7 — principio de finalidad + Art. 18 Ley 29733 — deber de informar + Guía ANPDP sobre el Deber de Informar §4.2).'] }
     }
 
     const frasesGenericas = [
@@ -166,7 +166,7 @@ const det = {
       return {
         cumple: false,
         nivel: 'AUSENCIA',
-        detalles: ['No se identifican destinatarios ni se declara expresamente que no hay transferencia a terceros']
+        detalles: ['No se identifican destinatarios ni se declara expresamente que no hay transferencia a terceros (Art. 18 Ley 29733 + Art. 6.1.3 DS 016-2024-JUS + Guía ANPDP sobre el Deber de Informar §4.3).']
       }
     }
     return { cumple: true, usa_hipervinculo: usaHipervinculo }
@@ -198,7 +198,7 @@ const det = {
       const indicaPais = /(a\s+[A-ZÁÉÍÓÚ][a-záéíóú]+|hacia\s+[A-Z]|país\s+destinatario|[A-Z][a-z]+\s+\(proveedor)/i.test(t)
       const mencionaNivelAdecuado = /(nivel\s+adecuado|nivel\s+de\s+protecci[oó]n|cláusulas\s+contractuales|mecanismo\s+alternativo|consentimiento.*transferencia)/i.test(t)
       if (!indicaPais) {
-        return { cumple: false, nivel: 'SIN_PAIS_DESTINATARIO', detalles: ['Se declara transferencia internacional pero no se identifica el país o países destinatarios'] }
+        return { cumple: false, nivel: 'SIN_PAIS_DESTINATARIO', detalles: ['Se declara transferencia internacional pero no se identifica el país o países destinatarios (Art. 15 Ley 29733 + Art. 6.1.7 DS 016-2024-JUS).'] }
       }
       if (!mencionaNivelAdecuado) {
         return { cumple: false, nivel: 'SIN_NIVEL_PROTECCION', detalles: ['Se declara transferencia internacional con país identificado pero no se informa sobre el nivel de protección adecuado ni el mecanismo alternativo aplicable (Art. 15 Ley 29733)'] }
@@ -211,8 +211,8 @@ const det = {
   bancoDatos(t: string): ResultadoDetector {
     const menciona = /(banco\s+de\s+datos|base\s+de\s+datos\s+personal|RNPDP|registro\s+nacional)/i.test(t)
     const tieneCodigoRNPDP = /RNPDP\s*[n°º\-#]?\s*\d{3,}/i.test(t)
-    if (!menciona) return { cumple: false, nivel: 'AUSENCIA', detalles: ['La política no menciona el banco de datos en que se almacenarán los datos'] }
-    if (!tieneCodigoRNPDP) return { cumple: 'PARCIAL', nivel: 'SIN_CODIGO_RNPDP', detalles: ['Se menciona el banco de datos pero no se indica el código de inscripción en el RNPDP'] }
+    if (!menciona) return { cumple: false, nivel: 'AUSENCIA', detalles: ['La política no menciona el banco de datos en que se almacenarán los datos (Art. 18 Ley 29733 — deber de informar + Art. 6.1.4 DS 016-2024-JUS + Guía ANPDP sobre el Deber de Informar §4.4).'] }
+    if (!tieneCodigoRNPDP) return { cumple: 'PARCIAL', nivel: 'SIN_CODIGO_RNPDP', detalles: ['Se menciona el banco de datos pero no se indica el código de inscripción en el Registro Nacional de Protección de Datos Personales — RNPDP (Art. 29 + Art. 34 Ley 29733 — inscripción obligatoria del banco de datos + Art. 6.1.4 DS 016-2024-JUS + Guía ANPDP sobre el Deber de Informar §4.4).'] }
     return { cumple: true }
   },
 
@@ -251,7 +251,7 @@ const det = {
     const esVago = plazosVagos.some(r => r.test(t))
     const plazoDeterminado = /(\d+\s*(año|mes|día|semana)|mientras\s+dure\s+la\s+relaci[oó]n|hasta\s+que\s+revoque|durante\s+la\s+vigencia\s+del\s+contrato|hasta\s+que\s+solicite\s+su\s+cancelaci[oó]n)/i.test(t)
     if (!tieneAlgoPlazo) return { cumple: false, nivel: 'AUSENCIA', detalles: ['La política no incluye el plazo de conservación de los datos (Art. 18 Ley 29733 + Art. 6.1.9 DS 016-2024-JUS)'] }
-    if (esVago && !plazoDeterminado) return { cumple: false, nivel: 'PLAZO_INDETERMINADO', detalles: ['El plazo de conservación es vago e indeterminado. La normativa exige plazo determinado o, al menos, criterio determinable'] }
+    if (esVago && !plazoDeterminado) return { cumple: false, nivel: 'PLAZO_INDETERMINADO', detalles: ['El plazo de conservación es vago e indeterminado. La normativa exige plazo determinado o, al menos, criterio determinable (Art. 8 — principio de calidad + Art. 18 Ley 29733 + Art. 6.1.9 DS 016-2024-JUS + Guía ANPDP sobre el Deber de Informar §4.6).'] }
     return { cumple: true }
   },
 
@@ -259,7 +259,7 @@ const det = {
   derechosARCO(t: string): ResultadoDetector {
     const resultado: ResultadoDetector = { cumple: true, faltantes: [], detalles: [] }
     const mencionaDerechos = /(derechos?\s+(de\s+)?(acceso|rectificaci[oó]n|cancelaci[oó]n|oposici[oó]n)|derechos?\s+ARCO|titular.*derechos?)/i.test(t)
-    if (!mencionaDerechos) return { cumple: false, nivel: 'AUSENCIA_TOTAL', detalles: ['La política no hace mención de los derechos del titular (derechos ARCO)'] }
+    if (!mencionaDerechos) return { cumple: false, nivel: 'AUSENCIA_TOTAL', detalles: ['La política no hace mención de los derechos del titular (derechos ARCO: acceso, rectificación, cancelación y oposición — Arts. 18 a 25 Ley 29733 + Art. 6.1.10 DS 016-2024-JUS + Guía ANPDP sobre el Deber de Informar §4.7).'] }
     const tieneEmail = /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/i.test(t)
     const tieneDireccionFisica = /(mesa\s+de\s+partes|nuestras\s+oficinas|en\s+(la\s+)?direcci[oó]n|presencialmente\s+en)/i.test(t)
     const tieneFormulario = /(formulario|form|portal|plataforma|sistema)\s+(de\s+)?(solicitud|ARCO|derechos)/i.test(t)
@@ -267,7 +267,7 @@ const det = {
     if (!tieneCanal) {
       resultado.cumple = false
       resultado.faltantes?.push('SIN_CANAL_VERIFICABLE')
-      resultado.detalles?.push('No se indica un canal concreto y verificable para ejercer los derechos ARCO (correo electrónico, dirección física o formulario)')
+      resultado.detalles?.push('No se indica un canal concreto y verificable para ejercer los derechos ARCO — correo electrónico, dirección física o formulario (Art. 19 Ley 29733 — derecho a contactar al responsable + Art. 6.1.10 DS 016-2024-JUS + Guía ANPDP sobre el Deber de Informar §4.7).')
     }
     const mencionaRevocacion = /(revocar|revocaci[oó]n|retirar.*consentimiento|dejar\s+de\s+autorizar|cancelar.*consentimiento)/i.test(t)
     if (!mencionaRevocacion) {
@@ -278,7 +278,7 @@ const det = {
     const mencionaANPDP = /(ANPDP|DGTAIPD|Autoridad\s+Nacional\s+de\s+Protecci[oó]n|tutela|Ministerio\s+de\s+Justicia.*protecci[oó]n\s+de\s+datos)/i.test(t)
     if (!mencionaANPDP) {
       resultado.faltantes?.push('SIN_REFERENCIA_ANPDP')
-      resultado.detalles?.push('No se menciona la ANPDP como autoridad ante la que el titular puede ejercer su derecho de tutela')
+      resultado.detalles?.push('No se menciona a la Autoridad Nacional de Protección de Datos Personales — ANPDP como autoridad ante la que el titular puede ejercer su derecho de tutela (Art. 24 Ley 29733 — derecho de tutela + Guía ANPDP sobre el Deber de Informar §4.7).')
     }
     if ((resultado.faltantes?.length || 0) > 0 && !resultado.nivel) {
       resultado.nivel = resultado.faltantes?.join('+')
@@ -691,7 +691,7 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
         severidad: nivelArco === 'AUSENCIA_TOTAL' ? 'GRAVE' : 'IMPORTANTE',
         hallazgo: nivelArco === 'AUSENCIA_TOTAL'
           ? 'La política no informa sobre los derechos ARCO ni los mecanismos para ejercerlos.'
-          : `Información sobre derechos ARCO incompleta. Falta(n): ${nivelArco.replace(/\+/g, ', ')}`,
+          : 'Información sobre derechos ARCO incompleta: la política menciona los derechos pero omite uno o más elementos exigidos por la Ley 29733 y la Guía ANPDP. Revisar el detalle por sub-elementos.',
         evidencia: 'AUSENTE o INCOMPLETO en la política.',
         norma_vulnerada: 'Art. 18-19 Ley 29733 + Art. 6.1.10 DS 016-2024-JUS',
         riesgo_infraccion: nivelArco === 'AUSENCIA_TOTAL' ? 'grave' : 'leve',

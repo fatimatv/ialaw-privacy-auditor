@@ -158,7 +158,9 @@ describe("crearHtmlReporte", () => {
     expect(html).toContain("Detalle de sub-elementos");
     expect(html).toContain("derecho de revocacion");
     expect(html).toContain("ANPDP como autoridad de tutela");
-    expect(html).toContain("SIN_REVOCACION+SIN_REFERENCIA_ANPDP");
+    // El codigo tecnico del nivel no debe aparecer en el PDF publico:
+    // es un identificador interno en formato code-style, no espanol juridico.
+    expect(html).not.toContain("SIN_REVOCACION+SIN_REFERENCIA_ANPDP");
   });
 
   it("renderiza elementos cumplidos como tarjetas estructuradas", () => {

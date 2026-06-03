@@ -45,9 +45,13 @@ function renderDetalles(detalles?: string[]): string {
   `;
 }
 
-function renderNivelTecnico(nivel?: string): string {
-  if (!nivel) return "";
-  return `<p class="nivel-tecnico"><strong>Nivel tecnico:</strong> <code>${escaparHtml(nivel)}</code></p>`;
+function renderNivelTecnico(_nivel?: string): string {
+  // El nivel del detector es un codigo tecnico interno
+  // (ej. "SIN_REVOCACION+SIN_REFERENCIA_ANPDP"); se omite del reporte
+  // publico por estar en formato de codigo, no en lenguaje juridico.
+  // Sigue disponible en el JSON crudo de la auditoria para auditoria
+  // tecnica si hace falta.
+  return "";
 }
 
 export type LogosReporte = {
