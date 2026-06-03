@@ -259,16 +259,32 @@ async function obtenerEnlacesYHtmlHome(browser, url, origen) {
 async function obtenerTextoPolitica(browser, urlPolitica) {
   const page = await context.newPage();
   try {
+    // waitUntil: "load" en vez de domcontentloaded para esperar todos
+    // los resources (Elementor/WordPress carga contenido en stages).
     await page
       .goto(urlPolitica, {
-        waitUntil: "domcontentloaded",
+        waitUntil: "load",
         timeout: TIMEOUT_NAV_MS,
       })
       .catch(() => undefined);
-    return await page
+    await page
+      .waitForLoadState("networkidle", { timeout: TIMEOUT_NETWORKIDLE_MS })
+      .catch(() => undefined);
+
+    // innerText devuelve solo texto visible; si por algun motivo viene
+    // demasiado corto (lazy-loading, accordion colapsado, etc.) caemos
+    // a textContent que retorna TODO el texto del DOM, incluso oculto.
+    const innerText = await page
       .locator("body")
-      .innerText({ timeout: TIMEOUT_POLITICA_MS })
+      .innerText({ timeout: 15_000 })
       .catch(() => "");
+    if (innerText && innerText.length >= 800) return innerText;
+
+    const textContent = await page
+      .locator("body")
+      .evaluate((el) => el.textContent ?? "")
+      .catch(() => "");
+    return textContent.length > innerText.length ? textContent : innerText;
   } finally {
     await page.close();
   }

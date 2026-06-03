@@ -55,7 +55,21 @@ function resolverUrl(base: string, href?: string): string | undefined {
 }
 
 function textoNormalizado(texto: string): string {
-  return texto.replace(/\s+/g, " ").trim();
+  // Stripping de chars invisibles que CMS (WordPress/Elementor) y
+  // builders de texto insertan dentro de palabras y rompen los regex
+  // de los detectores:
+  // - U+00AD soft hyphen (hyphenation hints)
+  // - U+200B zero-width space
+  // - U+200C zero-width non-joiner
+  // - U+200D zero-width joiner
+  // - U+FEFF BOM / zero-width no-break space
+  // Tambien normalizamos a NFC para que caracteres descompuestos
+  // (e + acento combinado) queden como sus formas precompuestas.
+  return texto
+    .normalize("NFC")
+    .replace(/[­​‌‍﻿]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function extraerPolitica($: cheerio.CheerioAPI, url: string, politicaTexto?: string) {
