@@ -232,12 +232,17 @@ async function obtenerEnlacesYHtmlHome(browser, url, origen) {
   const page = await context.newPage();
   try {
     await page.goto(url, {
-      waitUntil: "domcontentloaded",
+      waitUntil: "load",
       timeout: TIMEOUT_NAV_MS,
     });
     await page
-      .waitForLoadState("networkidle", { timeout: TIMEOUT_NETWORKIDLE_MS })
+      .waitForLoadState("networkidle", { timeout: 15_000 })
       .catch(() => undefined);
+    // Buffer adicional para SPAs / sitios con analytics que jamas
+    // alcanzan networkidle. Sin esto, dos audits del mismo sitio pueden
+    // dar scores distintos porque a veces el footer alcanza a renderizar
+    // y a veces no antes de que extraigamos el HTML.
+    await page.waitForTimeout(2_000);
     const html = await page.content();
     const enlaces = await extraerEnlacesInternos(page, origen);
     const politicaHref = await page
@@ -256,7 +261,42 @@ async function obtenerEnlacesYHtmlHome(browser, url, origen) {
   }
 }
 
+async function descargarYExtraerPdf(urlPdf) {
+  try {
+    const response = await context.request.get(urlPdf, { timeout: TIMEOUT_NAV_MS });
+    if (!response.ok()) return "";
+    const buffer = await response.body();
+    // Usamos la build "legacy" de pdfjs-dist porque tiene API ESM
+    // estable y no requiere workers (los workers requieren config
+    // adicional que en serverless no vale la pena).
+    const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+    const doc = await pdfjs.getDocument({
+      data: new Uint8Array(buffer),
+      disableFontFace: true,
+      useSystemFonts: false,
+    }).promise;
+    let texto = "";
+    const numPages = doc.numPages;
+    for (let i = 1; i <= numPages; i++) {
+      const page = await doc.getPage(i);
+      const content = await page.getTextContent();
+      texto += content.items.map((item) => item.str ?? "").join(" ") + "\n";
+    }
+    return texto;
+  } catch {
+    return "";
+  }
+}
+
 async function obtenerTextoPolitica(browser, urlPolitica) {
+  // Muchas politicas se publican como PDF (especialmente en sitios .gob,
+  // ONGs, retailers). innerText() de Playwright sobre un PDF devuelve
+  // vacio porque el browser delega a un viewer interno. Detectamos por
+  // extension de URL y extraemos texto con pdf-parse desde el binario.
+  if (/\.pdf(\?|#|$)/i.test(urlPolitica)) {
+    return descargarYExtraerPdf(urlPolitica);
+  }
+
   const page = await context.newPage();
   try {
     // waitUntil: "load" en vez de domcontentloaded para esperar todos
@@ -267,13 +307,16 @@ async function obtenerTextoPolitica(browser, urlPolitica) {
         timeout: TIMEOUT_NAV_MS,
       })
       .catch(() => undefined);
+    // Networkidle hasta 15s (algunos sitios con analytics tipo Hotjar
+    // nunca llegan a idle; el catch hace que sigamos despues del timeout).
     await page
-      .waitForLoadState("networkidle", { timeout: TIMEOUT_NETWORKIDLE_MS })
+      .waitForLoadState("networkidle", { timeout: 15_000 })
       .catch(() => undefined);
 
     // innerText devuelve solo texto visible; si por algun motivo viene
-    // demasiado corto (lazy-loading, accordion colapsado, etc.) caemos
-    // a textContent que retorna TODO el texto del DOM, incluso oculto.
+    // demasiado corto (lazy-loading, accordion colapsado, anti-bot que
+    // sirve menos contenido la primera vez) caemos a textContent que
+    // retorna TODO el texto del DOM, incluso oculto.
     const innerText = await page
       .locator("body")
       .innerText({ timeout: 15_000 })

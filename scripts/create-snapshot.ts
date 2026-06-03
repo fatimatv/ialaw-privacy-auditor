@@ -65,10 +65,10 @@ async function main() {
       throw new Error("dnf install fallo");
     }
 
-    console.log("Instalando playwright (sin postinstall que descarga browsers)...");
+    console.log("Instalando playwright + pdfjs-dist (sin postinstall que descarga browsers)...");
     await sandbox.runCommand("sh", [
       "-c",
-      "PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install playwright",
+      "PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install playwright pdfjs-dist",
     ]);
 
     console.log("Descargando Chromium en node_modules (esto tarda 30-60s)...");
