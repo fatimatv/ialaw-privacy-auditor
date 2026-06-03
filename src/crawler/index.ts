@@ -1,6 +1,7 @@
-import { chromium, type Browser, type Page } from "playwright";
+import type { Browser, Page } from "playwright-core";
 import type { DatosCrawler } from "../analyzer/types";
 import { combinarEvidencias, extraerEvidenciaPublica } from "../extractor";
+import { lanzarChromium } from "../lib/browser";
 import { validarUrlPublica } from "./url-guard";
 
 const TEXTO_POLITICA = /(privacidad|protecci[oó]n de datos|datos personales|privacy)/i;
@@ -14,9 +15,14 @@ const RUTAS_CON_FORMULARIOS =
 const URLS_NO_NAVEGABLES =
   /^(mailto|tel|javascript|sms|whatsapp):|\.(png|jpg|jpeg|gif|svg|webp|pdf|zip|rar|7z|ico|css|js|woff|woff2|ttf|otf|eot|mp4|mp3|webm|mov|avi)(\?|#|$)/i;
 
+// En entornos serverless (Vercel Functions) hay un cap de tiempo de 60s.
+// Auditar 8 paginas con Playwright es viable en local pero suele rozar
+// el limite en serverless. Por defecto reducimos a 4 cuando detectamos
+// VERCEL=1; el cap sigue siendo configurable via AUDITOR_MAX_PAGINAS.
+const PAGINAS_POR_DEFECTO = process.env.VERCEL ? 4 : 8;
 const MAX_PAGINAS = Math.max(
   1,
-  Math.min(20, Number(process.env.AUDITOR_MAX_PAGINAS ?? 8)),
+  Math.min(20, Number(process.env.AUDITOR_MAX_PAGINAS ?? PAGINAS_POR_DEFECTO)),
 );
 const TIMEOUT_NAV_MS = 30_000;
 const TIMEOUT_NETWORKIDLE_MS = 8_000;
@@ -185,7 +191,7 @@ async function obtenerTextoPolitica(browser: Browser, urlPolitica: string): Prom
 export async function auditarSitioPublico(urlEntrada: string): Promise<DatosCrawler> {
   const url = await validarUrlPublica(urlEntrada);
   const origen = new URL(url);
-  const browser = await chromium.launch({ headless: true });
+  const browser = await lanzarChromium();
 
   try {
     const { html: htmlHome, enlaces, politicaHref } = await obtenerEnlacesYHtmlHome(

@@ -1,8 +1,8 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { NextResponse } from "next/server";
-import { chromium } from "playwright";
 import type { ResultadoAuditoria } from "@/analyzer/types";
+import { lanzarChromium } from "@/lib/browser";
 import { limitadorReporte, obtenerIdentificadorCliente } from "@/lib/rate-limit";
 import { crearHtmlReporte, type LogosReporte } from "@/report/pdf";
 
@@ -26,6 +26,7 @@ function cargarLogos(): LogosReporte {
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 type SolicitudReporte = {
   resultado?: ResultadoAuditoria;
@@ -60,7 +61,7 @@ export async function POST(request: Request) {
   }
 
   const html = crearHtmlReporte(body.resultado, cargarLogos());
-  const browser = await chromium.launch({ headless: true });
+  const browser = await lanzarChromium();
 
   try {
     const page = await browser.newPage();
