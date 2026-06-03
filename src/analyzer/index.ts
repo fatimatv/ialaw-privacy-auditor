@@ -197,13 +197,35 @@ const det = {
       }
     }
     if (declaraTransferencia) {
-      const indicaPais = /(a\s+[A-ZÁÉÍÓÚ][a-záéíóú]+|hacia\s+[A-Z]|país\s+destinatario|[A-Z][a-z]+\s+\(proveedor)/i.test(t)
-      const mencionaNivelAdecuado = /(nivel\s+adecuado|nivel\s+de\s+protecci[oó]n|cláusulas\s+contractuales|mecanismo\s+alternativo|consentimiento.*transferencia)/i.test(t)
+      // Cualquiera de:
+      // (a) un pais de la lista de paisesExtranjeros — independientemente
+      //     de su construccion sintactica ("Localizacion: Estados Unidos",
+      //     "almacenamiento en USA", etc.). El regex original solo
+      //     reconocia "a Pais" o "hacia Pais", lo que dejaba afuera
+      //     declaraciones por bullet/etiqueta.
+      // (b) un patron gramatical clasico ("a [Pais]", "hacia [Pais]",
+      //     "pais destinatario", "[Empresa] (proveedor").
+      const indicaPais = paisesExtranjeros || /(a\s+[A-ZÁÉÍÓÚ][a-záéíóú]+|hacia\s+[A-Z]|pa[ií]s\s+destinatario|[A-Z][a-z]+\s+\(proveedor|localizaci[oó]n\s*:|domicilio\s+en\s+[A-Z])/i.test(t)
+      const mencionaNivelAdecuado = /(nivel\s+adecuado|nivel\s+de\s+protecci[oó]n|cl[áa]usulas\s+contractuales|mecanismo\s+alternativo|consentimiento.*transferencia|garant[ií]as\s+(adecuadas|suficientes))/i.test(t)
       if (!indicaPais) {
-        return { cumple: false, nivel: 'SIN_PAIS_DESTINATARIO', detalles: ['Se declara transferencia internacional pero no se identifica el país o países destinatarios (Art. 15 Ley 29733 + Art. 6.1.7 DS 016-2024-JUS).'] }
+        return {
+          cumple: false,
+          nivel: 'SIN_PAIS_DESTINATARIO',
+          detalles: ['Se declara transferencia internacional pero no se identifica el país o países destinatarios (Art. 15 Ley 29733 + Art. 6.1.7 DS 016-2024-JUS + Guía ANPDP sobre el Deber de Informar §4.5).'],
+        }
       }
       if (!mencionaNivelAdecuado) {
-        return { cumple: false, nivel: 'SIN_NIVEL_PROTECCION', detalles: ['Se declara transferencia internacional con país identificado pero no se informa sobre el nivel de protección adecuado ni el mecanismo alternativo aplicable (Art. 15 Ley 29733)'] }
+        // PARCIAL: el pais SI esta identificado, pero falta el otro
+        // componente que exige el Art. 15: declarar si el destinatario
+        // cuenta con nivel adecuado de proteccion reconocido por la
+        // ANPDP o, en su defecto, el mecanismo alternativo aplicable.
+        return {
+          cumple: 'PARCIAL',
+          nivel: 'SIN_NIVEL_PROTECCION',
+          detalles: [
+            'La política identifica el país destinatario de la transferencia internacional, pero no indica el sustento legal de la transferencia: ni el "nivel adecuado de protección" reconocido por la ANPDP, ni el mecanismo alternativo aplicable — cláusulas contractuales tipo, normas corporativas vinculantes, consentimiento explícito del titular u otro — exigido por el Art. 15 Ley 29733 + Arts. 11 a 13 DS 016-2024-JUS + Guía ANPDP sobre el Deber de Informar §4.5.',
+          ],
+        }
       }
     }
     return { cumple: true }
@@ -606,24 +628,47 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
     }
 
     // A.4b — Transferencia internacional
+    // El detector puede emitir tres niveles distintos. Antes el hallazgo
+    // y la recomendacion combinaban "no se identifica país NI nivel de
+    // proteccion", que era contradictorio cuando el pais SI estaba
+    // identificado (caso reportado en capece.org.pe). Ahora cada nivel
+    // tiene su propio texto.
     const r_transf = detectores.transferencia
-    if (!r_transf.cumple) {
-      contadorElementosFaltantesArt18++
+    if (!r_transf.cumple || r_transf.cumple === 'PARCIAL') {
+      if (!r_transf.cumple) contadorElementosFaltantesArt18++
+      const nivelT = r_transf.nivel || ''
+      let hallazgoT: string
+      let evidenciaT: string
+      let recomendacionT: string
+      let severidadT: 'GRAVE' | 'IMPORTANTE' | 'MODERADA'
+      if (nivelT === 'TRANSFERENCIA_NO_DECLARADA') {
+        severidadT = 'GRAVE'
+        hallazgoT = 'Se detecta el uso de servicios de terceros en el extranjero (proveedores cloud, analytics, etc.) pero la política no declara el flujo transfronterizo de datos.'
+        evidenciaT = 'Indicios de servicios extranjeros detectados en el sitio sin declaración de transferencia internacional.'
+        recomendacionT = 'Declarar la transferencia internacional, identificar los países destinatarios e informar si cuentan con nivel adecuado de protección o el mecanismo alternativo aplicable (Art. 15 Ley 29733).'
+      } else if (nivelT === 'SIN_PAIS_DESTINATARIO') {
+        severidadT = 'IMPORTANTE'
+        hallazgoT = 'La política declara transferencia internacional pero no identifica el país o países destinatarios.'
+        evidenciaT = 'La política menciona transferencia internacional sin especificar el país destinatario.'
+        recomendacionT = 'Identificar expresamente los países destinatarios de la transferencia internacional.'
+      } else {
+        // SIN_NIVEL_PROTECCION (cumple PARCIAL)
+        severidadT = 'MODERADA'
+        hallazgoT = 'La política identifica el país destinatario de la transferencia internacional pero no indica el sustento legal de la transferencia (nivel adecuado de protección o mecanismo alternativo).'
+        evidenciaT = 'País identificado en la política; falta indicación del nivel adecuado de protección o mecanismo alternativo.'
+        recomendacionT = 'Complementar declarando si el país destinatario cuenta con nivel adecuado de protección reconocido por la ANPDP, o el mecanismo alternativo aplicable: cláusulas contractuales tipo, normas corporativas vinculantes (BCR) o consentimiento explícito del titular (Art. 15 Ley 29733 + Arts. 11 a 13 DS 016-2024-JUS).'
+      }
       observaciones.push({
         id: `OBS-${String(observaciones.length + 1).padStart(2, '0')}`,
         modulo: 'A',
         categoria: 'Transferencia internacional de datos',
-        severidad: r_transf.nivel === 'TRANSFERENCIA_NO_DECLARADA' ? 'GRAVE' : 'IMPORTANTE',
-        hallazgo: r_transf.nivel === 'TRANSFERENCIA_NO_DECLARADA'
-          ? 'Se detecta el uso de servicios de terceros en el extranjero (proveedores cloud, analytics, etc.) pero la política no declara el flujo transfronterizo de datos.'
-          : 'Se declara transferencia internacional pero no se identifica el país destinatario ni el nivel de protección.',
-        evidencia: r_transf.nivel === 'TRANSFERENCIA_NO_DECLARADA'
-          ? 'Indicios de servicios extranjeros detectados en el sitio sin declaración de transferencia internacional.'
-          : 'La política menciona transferencia internacional sin especificar país destinatario.',
-        norma_vulnerada: 'Art. 15 Ley 29733 + Art. 6.1.7 DS 016-2024-JUS',
-        riesgo_infraccion: 'grave',
-        base_infraccion: 'Art. 133.2 DS 016-2024-JUS',
-        recomendacion: 'Declarar el flujo transfronterizo, identificar los países destinatarios e informar si cuentan con nivel de protección adecuado o el mecanismo alternativo aplicable (Art. 15 Ley 29733).'
+        severidad: severidadT,
+        hallazgo: hallazgoT,
+        evidencia: evidenciaT,
+        norma_vulnerada: 'Art. 15 Ley 29733 + Art. 6.1.7 DS 016-2024-JUS + Arts. 11 a 13 DS 016-2024-JUS + Guía ANPDP sobre el Deber de Informar §4.5',
+        riesgo_infraccion: severidadT === 'GRAVE' ? 'grave' : 'leve',
+        base_infraccion: severidadT === 'GRAVE' ? 'Art. 133.2 DS 016-2024-JUS' : 'Art. 132.5 DS 016-2024-JUS',
+        recomendacion: recomendacionT,
       })
     }
 
