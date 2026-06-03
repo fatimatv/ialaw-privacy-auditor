@@ -43,12 +43,16 @@ async function main() {
     console.log("Instalando playwright...");
     await sandbox.runCommand("npm", ["install", "playwright"]);
 
-    console.log("Descargando Chromium (esto tarda 30-60s)...");
-    await sandbox.runCommand("npx", [
-      "playwright",
-      "install",
-      "--with-deps",
-      "chromium",
+    // PLAYWRIGHT_BROWSERS_PATH=0 instala Chromium dentro de
+    // node_modules/playwright-core/.local-browsers/ en vez de
+    // ~/.cache/ms-playwright. Lo importante: queda dentro de la cwd
+    // del sandbox, asi el snapshot lo captura. Con la ubicacion default
+    // en home, el snapshot no lo preserva y el sandbox levantado desde
+    // el snapshot piensa que playwright no esta "installed".
+    console.log("Descargando Chromium en node_modules (esto tarda 30-60s)...");
+    await sandbox.runCommand("sh", [
+      "-c",
+      "PLAYWRIGHT_BROWSERS_PATH=0 npx playwright install --with-deps chromium",
     ]);
 
     console.log("Creando snapshot del sandbox...");

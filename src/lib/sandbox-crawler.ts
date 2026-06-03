@@ -81,10 +81,12 @@ export async function auditarEnSandbox(
       },
     ]);
 
-    const ejecucion = (await sandbox.runCommand("node", [
-      "sandbox-crawler.mjs",
-      url,
-      String(maxPaginas),
+    // PLAYWRIGHT_BROWSERS_PATH=0 hace que playwright busque el binario
+    // de Chromium dentro de node_modules en vez de ~/.cache. Es donde
+    // el snapshot lo dejo (ver scripts/create-snapshot.ts).
+    const ejecucion = (await sandbox.runCommand("sh", [
+      "-c",
+      `PLAYWRIGHT_BROWSERS_PATH=0 node sandbox-crawler.mjs ${JSON.stringify(url)} ${JSON.stringify(String(maxPaginas))}`,
     ])) as unknown as ConSalida;
 
     if (ejecucion.exitCode !== 0) {
