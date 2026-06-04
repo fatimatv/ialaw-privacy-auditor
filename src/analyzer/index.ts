@@ -1218,8 +1218,14 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
   // ── ELEMENTOS CUMPLIDOS ──
   // Estructurados como objetos con norma y evidencia para mostrarlos
   // en el reporte con el mismo nivel de detalle que las observaciones.
+  // Solo CUMPLE puro entra a elementos_cumplidos. PARCIAL aparece en el
+  // cuadro_art18 como PARCIAL y en observaciones (con severidad MODERADA),
+  // pero no es un cumplimiento — la comprobacion con `=== true` evita el
+  // bug previo en que 'PARCIAL' (string truthy) caia aca como cumplido y
+  // el mismo elemento aparecia simultaneamente como observacion y como
+  // cumplido (caso tailoy.com.pe).
   const elementosCumplidos: ElementoCumplido[] = []
-  if (detectores.identidad.cumple) {
+  if (detectores.identidad.cumple === true) {
     elementosCumplidos.push({
       categoria: 'Identidad y domicilio del responsable',
       norma: 'Art. 18 Ley 29733 + Art. 6.1.1 DS 016-2024-JUS',
@@ -1227,7 +1233,7 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
         'Se identificaron razón social/denominación, RUC (cuando aplica) y domicilio con los componentes minimos (via/frase de domicilio + numero o distrito) exigidos por la Guia ANPDP §4.1.',
     })
   }
-  if (detectores.finalidad.cumple) {
+  if (detectores.finalidad.cumple === true) {
     elementosCumplidos.push({
       categoria: 'Finalidad del tratamiento',
       norma: 'Art. 7 + Art. 18 Ley 29733',
@@ -1235,7 +1241,7 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
         'La politica declara finalidades especificas, no usa formulas genericas prohibidas por la Guia ANPDP §4.2 y, cuando hay finalidades adicionales, distingue su mecanismo de consentimiento.',
     })
   }
-  if (detectores.destinatarios.cumple) {
+  if (detectores.destinatarios.cumple === true) {
     elementosCumplidos.push({
       categoria: 'Destinatarios de los datos',
       norma: 'Art. 18 Ley 29733 + Art. 6.1.3 DS 016-2024-JUS',
@@ -1243,7 +1249,7 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
         'La politica identifica destinatarios o declara expresamente que no se transfieren datos a terceros.',
     })
   }
-  if (detectores.plazo.cumple) {
+  if (detectores.plazo.cumple === true) {
     elementosCumplidos.push({
       categoria: 'Plazo de conservación de datos',
       norma: 'Art. 18 Ley 29733 + Art. 6.1.9 DS 016-2024-JUS',
@@ -1251,7 +1257,7 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
         'La politica indica un plazo determinado o un criterio determinable de conservacion de los datos.',
     })
   }
-  if (detectores.arco.cumple) {
+  if (detectores.arco.cumple === true) {
     elementosCumplidos.push({
       categoria: 'Derechos ARCO y mecanismos de ejercicio',
       norma: 'Art. 18-19 Ley 29733 + Art. 6.1.10 DS 016-2024-JUS',

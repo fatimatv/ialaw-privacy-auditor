@@ -297,4 +297,37 @@ describe("analizarCumplimiento", () => {
       resultado.metodologia_calificacion?.clasificacion_deber_informar?.clasificacion,
     ).toBe("GRAVE");
   });
+
+  it("un elemento PARCIAL NO aparece en elementos_cumplidos (solo CUMPLE puro entra)", async () => {
+    // Caso real tailoy.com.pe: identidad detectada PARCIAL (razon social
+    // si, RUC ausente o domicilio incompleto) aparecia simultaneamente
+    // en elementos_cumplidos y como observacion, porque la guarda hacia
+    // `if (cumple)` y el string 'PARCIAL' es truthy. Regresion.
+    const texto = `
+      Empresa Demo S.A.C. con sede en Lima.
+      Finalidad: gestionar el servicio.
+      Conservamos los datos durante la vigencia del contrato.
+      Banco de datos RNPDP N 12345.
+      Datos obligatorios y facultativos identificados.
+      Derechos ARCO via privacidad@example.com. Puede revocar.
+      ANPDP como autoridad de tutela.
+      Ley 29733 y DS 016-2024-JUS.
+      No compartimos datos a terceros ni a nivel nacional o internacional.
+    `;
+    const resultado = await analizarCumplimiento({
+      url_auditada: "https://example.com",
+      politica_privacidad: { encontrada: true, texto },
+      formularios: [],
+      cookies_banner: { encontrado: false, texto: "" },
+      html_completo: "",
+    });
+
+    const a2Estado = resultado.cuadro_art18.find((c) => c.codigo === "A.2")?.estado;
+    if (a2Estado === "PARCIAL") {
+      const enCumplidos = resultado.elementos_cumplidos.some(
+        (c) => c.categoria === "Identidad y domicilio del responsable",
+      );
+      expect(enCumplidos).toBe(false);
+    }
+  });
 });
