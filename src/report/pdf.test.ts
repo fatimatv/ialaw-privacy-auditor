@@ -41,6 +41,14 @@ function resultadoBase(overrides: Partial<ResultadoAuditoria> = {}): ResultadoAu
     advertencias_metodologicas: [],
     metodologia_calificacion: metodologiaVacia(puntaje),
     cuadro_art18: [],
+    cobertura_art18: {
+      porcentaje: 100,
+      numerador: 1200,
+      denominador: 1200,
+      conteo: { CUMPLE: 12, PARCIAL: 0, INCUMPLE: 0, NO_VERIFICADO: 0 },
+      formula_texto:
+        "Cobertura = promedio del estado del cuadro Art. 18: CUMPLE = 100%, PARCIAL = 50%, INCUMPLE = 0%. Los elementos NO_VERIFICADO se excluyen del denominador.",
+    },
     ...overrides,
   };
 }

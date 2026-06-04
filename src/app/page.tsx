@@ -330,6 +330,26 @@ export default function Home() {
                     </p>
                   )}
                 </div>
+                {resultado.resultado.cobertura_art18 && (
+                  <div className="rounded-xl border border-[#dfe3ef] bg-[#f7f8fb] p-4">
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-3xl font-black leading-none text-[#011EF4]">
+                        {resultado.resultado.cobertura_art18.porcentaje}%
+                      </span>
+                      <span className="text-xs font-semibold uppercase tracking-wider text-[#6F7072]">
+                        Cobertura Art. 18
+                      </span>
+                    </div>
+                    <p className="mt-2 text-[10px] leading-4 text-[#6F7072]">
+                      {resultado.resultado.cobertura_art18.conteo.CUMPLE} cumple,{" "}
+                      {resultado.resultado.cobertura_art18.conteo.PARCIAL} parcial,{" "}
+                      {resultado.resultado.cobertura_art18.conteo.INCUMPLE} incumple
+                      {resultado.resultado.cobertura_art18.conteo.NO_VERIFICADO > 0 &&
+                        `, ${resultado.resultado.cobertura_art18.conteo.NO_VERIFICADO} no verificado`}
+                      . CUMPLE = 100%, PARCIAL = 50%, INCUMPLE = 0%.
+                    </p>
+                  </div>
+                )}
                 <p className="text-sm leading-6 text-[#374151]">{resultado.resultado.resumen_ejecutivo}</p>
                 <button
                   type="button"

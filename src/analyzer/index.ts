@@ -1440,10 +1440,37 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
     },
   ]
 
+  // ── COBERTURA ART. 18 ──
+  // Metrica complementaria al puntaje deductivo. Responde "que % del
+  // Art. 18 esta cubierto" en lugar de "que tan grave es lo que falta".
+  const pesos = { CUMPLE: 100, PARCIAL: 50, INCUMPLE: 0, NO_VERIFICADO: 0 } as const
+  const conteo = { CUMPLE: 0, PARCIAL: 0, INCUMPLE: 0, NO_VERIFICADO: 0 }
+  for (const e of cuadroArt18) conteo[e.estado] = (conteo[e.estado] ?? 0) + 1
+  // NO_VERIFICADO se excluye del denominador: si no se pudo verificar
+  // (p.ej. detector retorna undefined), no penaliza ni premia.
+  const evaluados = cuadroArt18.length - conteo.NO_VERIFICADO
+  const numeradorCobertura = cuadroArt18.reduce(
+    (acc, e) => acc + (pesos[e.estado] ?? 0),
+    0,
+  )
+  const denominadorCobertura = evaluados * 100
+  const porcentajeCobertura =
+    denominadorCobertura === 0
+      ? 0
+      : Math.round((numeradorCobertura / denominadorCobertura) * 100)
+  const cobertura_art18 = {
+    porcentaje: porcentajeCobertura,
+    numerador: numeradorCobertura,
+    denominador: denominadorCobertura,
+    conteo,
+    formula_texto:
+      'Cobertura = promedio del estado del cuadro Art. 18: CUMPLE = 100%, PARCIAL = 50%, INCUMPLE = 0%. Los elementos NO_VERIFICADO se excluyen del denominador.',
+  }
+
   return {
     sitio: url_auditada,
     fecha_auditoria: new Date().toISOString(),
-    resumen_ejecutivo: `Auditoría de cumplimiento bajo Ley N° 29733 y DS N° 016-2024-JUS. Se identificaron ${observaciones.length} observaciones: ${contMuyGrave} muy grave(s), ${contGrave} grave(s), ${contImportante} importante(s), ${contModerada} moderada(s). Puntaje de cumplimiento: ${puntaje}/100.`,
+    resumen_ejecutivo: `Auditoría de cumplimiento bajo Ley N° 29733 y DS N° 016-2024-JUS. Se identificaron ${observaciones.length} observaciones: ${contMuyGrave} muy grave(s), ${contGrave} grave(s), ${contImportante} importante(s), ${contModerada} moderada(s). Puntaje de cumplimiento: ${puntaje}/100. Cobertura del Art. 18: ${porcentajeCobertura}%.`,
     puntaje_cumplimiento: puntaje,
     elementos_faltantes_art18: contadorElementosFaltantesArt18,
     clasificacion_deber_informar: clasificacion,
@@ -1460,5 +1487,6 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
     ],
     metodologia_calificacion,
     cuadro_art18: cuadroArt18,
+    cobertura_art18,
   }
 }
