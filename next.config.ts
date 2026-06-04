@@ -7,7 +7,10 @@ const nextConfig: NextConfig = {
   // desde el route handler. Hay que decirle al file tracing de Vercel
   // que los incluya en el bundle de la function.
   outputFileTracingIncludes: {
-    "/auditar": ["./scripts/sandbox-crawler.mjs"],
+    "/auditar": [
+      "./scripts/sandbox-crawler.mjs",
+      "./scripts/sandbox-crawler-utils.mjs",
+    ],
     "/reporte": ["./scripts/sandbox-printer.mjs"],
   },
 };

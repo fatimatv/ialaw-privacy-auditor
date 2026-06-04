@@ -18,6 +18,11 @@ type ConSalida = {
 // process.cwd() y referenciado por readFileSync con path absoluto).
 const SCRIPT_RUTA = join(process.cwd(), "scripts", "sandbox-crawler.mjs");
 const SCRIPT_CONTENIDO = readFileSync(SCRIPT_RUTA, "utf-8");
+// El script principal importa la logica pura de utils via
+// `./sandbox-crawler-utils.mjs`. Hay que inyectar ese archivo en el
+// mismo directorio del sandbox o el import falla con ERR_MODULE_NOT_FOUND.
+const UTILS_RUTA = join(process.cwd(), "scripts", "sandbox-crawler-utils.mjs");
+const UTILS_CONTENIDO = readFileSync(UTILS_RUTA, "utf-8");
 
 function obtenerCredenciales(): {
   token?: string;
@@ -79,6 +84,10 @@ export async function auditarEnSandbox(
       {
         path: "sandbox-crawler.mjs",
         content: SCRIPT_CONTENIDO,
+      },
+      {
+        path: "sandbox-crawler-utils.mjs",
+        content: UTILS_CONTENIDO,
       },
     ]);
 
