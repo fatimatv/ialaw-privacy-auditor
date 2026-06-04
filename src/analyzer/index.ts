@@ -586,7 +586,9 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
     formularios: formulariosEntrada,
     cookies_banner: cookiesBannerEntrada,
     html_completo: htmlCompletoEntrada,
+    advertencias_crawler: advertenciasCrawlerEntrada,
   } = datosCrawler
+  const advertenciasCrawler = Array.isArray(advertenciasCrawlerEntrada) ? advertenciasCrawlerEntrada : []
   const politica_privacidad: PoliticaPrivacidadDetectada = politicaPrivacidadEntrada ?? { encontrada: false, texto: '' }
   const formularios: FormularioDetectado[] = Array.isArray(formulariosEntrada) ? formulariosEntrada : []
   const cookies_banner: CookiesBannerDetectado = cookiesBannerEntrada ?? { encontrado: false, texto: '' }
@@ -1387,6 +1389,7 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
     elementos_cumplidos: elementosCumplidos,
     trackers_detectados: trackersEncontrados,
     advertencias_metodologicas: [
+      ...advertenciasCrawler,
       'Este análisis es automatizado mediante motor de reglas. No reemplaza la auditoría legal especializada.',
       'La verificación de inscripción efectiva en el RNPDP requiere consulta directa a la ANPDP.',
       'Las observaciones sobre datos sensibles y proporcionalidad requieren verificación manual del auditor.',

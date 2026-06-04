@@ -298,6 +298,7 @@ type CombinarEvidenciasEntrada = {
   paginas: DatosCrawler[];
   politica_texto?: string;
   politica_url?: string;
+  advertencias_crawler?: string[];
 };
 
 function claveDedupFormulario(f: FormularioDetectado): string {
@@ -306,7 +307,7 @@ function claveDedupFormulario(f: FormularioDetectado): string {
 }
 
 export function combinarEvidencias(entrada: CombinarEvidenciasEntrada): DatosCrawler {
-  const { url_auditada, paginas, politica_texto, politica_url } = entrada;
+  const { url_auditada, paginas, politica_texto, politica_url, advertencias_crawler } = entrada;
 
   const vistos = new Set<string>();
   const formularios: FormularioDetectado[] = [];
@@ -343,5 +344,9 @@ export function combinarEvidencias(entrada: CombinarEvidenciasEntrada): DatosCra
     formularios,
     cookies_banner,
     html_completo,
+    advertencias_crawler:
+      advertencias_crawler && advertencias_crawler.length > 0
+        ? advertencias_crawler
+        : undefined,
   };
 }

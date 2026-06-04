@@ -43,6 +43,7 @@ type SalidaSandbox = {
   paginas: { url: string; html: string }[];
   politica_url?: string;
   politica_texto?: string;
+  advertencias_crawler?: string[];
 };
 
 export async function auditarEnSandbox(
@@ -113,6 +114,7 @@ export async function auditarEnSandbox(
       paginas,
       politica_texto: salida.politica_texto,
       politica_url: salida.politica_url,
+      advertencias_crawler: salida.advertencias_crawler,
     });
   } finally {
     await sandbox.stop().catch(() => undefined);

@@ -55,6 +55,11 @@ export type DatosCrawler = {
   formularios: FormularioDetectado[];
   cookies_banner: CookiesBannerDetectado;
   html_completo: string;
+  // Avisos emitidos por el crawler durante la captura (p.ej. presupuesto
+  // de tiempo agotado y se omitieron paginas). El analyzer los incorpora
+  // en advertencias_metodologicas para que el usuario sepa que la
+  // auditoria fue abreviada.
+  advertencias_crawler?: string[];
 };
 
 export type Observacion = {

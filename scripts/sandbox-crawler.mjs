@@ -427,6 +427,19 @@ async function nuevoContexto(browser) {
   return ctx;
 }
 
+// Presupuesto de tiempo del crawler. Vercel mata la funcion a los 60s,
+// asi que damos margen de seguridad para el analyzer + transit de la
+// respuesta. Si el home solo ya consumio >25s (sitios pesados como
+// niubox.legal), saltamos el sondeo de 14 paths comunes y limitamos las
+// paginas adicionales. Si tambien la politica se demoro y pasamos >45s,
+// no visitamos rutas extra. El score saldra basado en lo que alcanzamos
+// a observar, sin riesgo de FUNCTION_INVOCATION_TIMEOUT.
+const PRESUPUESTO = {
+  totalMs: 50_000,
+  saltarSondeoSiHomePasaDe: 25_000,
+  saltarPaginasExtraSiPasaDe: 45_000,
+};
+
 async function main() {
   const url = process.argv[2];
   const maxPaginas = Math.max(1, Math.min(20, Number(process.argv[3] ?? 4)));
@@ -435,6 +448,10 @@ async function main() {
     console.error("Uso: node sandbox-crawler.mjs <url> [maxPaginas]");
     process.exit(2);
   }
+
+  const inicio = Date.now();
+  const transcurridoMs = () => Date.now() - inicio;
+  const advertencias = [];
 
   const origen = new URL(url);
   const browser = await chromium.launch({ headless: true });
@@ -445,10 +462,21 @@ async function main() {
       await obtenerEnlacesYHtmlHome(browser, url, origen);
 
     const sitemap = await leerSitemap(browser, origen);
-    // Sondeo en paralelo de paths comunes de formularios. Permite que
-    // /crear-cuenta, /checkout, /login etc. aparezcan como candidatos
-    // incluso si el home (SPA) no los linkea via <a>.
-    const probadas = await sondearPathsComunes(origen);
+    const homeTookMs = transcurridoMs();
+
+    // Si el home + sitemap ya consumieron mucho tiempo, saltamos el
+    // sondeo de paths comunes (~5s) y reducimos la exploracion.
+    let probadas = [];
+    if (homeTookMs > PRESUPUESTO.saltarSondeoSiHomePasaDe) {
+      advertencias.push(
+        `Sondeo de paths comunes omitido: home tardo ${Math.round(homeTookMs / 1000)}s. Es posible que algunos formularios (login, checkout) no se hayan explorado.`,
+      );
+      console.error(
+        `[crawler] home tardo ${homeTookMs}ms, saltando sondearPathsComunes`,
+      );
+    } else {
+      probadas = await sondearPathsComunes(origen);
+    }
     const candidatas =
       sitemap.length > 0 ? [...sitemap, ...probadas] : [...enlaces, ...probadas];
     const urlNormalizada = normalizarUrl(url);
@@ -460,7 +488,12 @@ async function main() {
     const rutasAVisitar = rutasOrdenadas.slice(0, maxPaginas - 1);
 
     const paginas = [{ url, html: htmlHome }];
+    let omitidasPorTiempo = 0;
     for (const ruta of rutasAVisitar) {
+      if (transcurridoMs() > PRESUPUESTO.saltarPaginasExtraSiPasaDe) {
+        omitidasPorTiempo = rutasAVisitar.length - paginas.length + 1;
+        break;
+      }
       try {
         await validarUrlPublica(ruta);
       } catch {
@@ -469,6 +502,14 @@ async function main() {
       const html = await abrirYExtraerHtml(browser, ruta);
       if (!html) continue;
       paginas.push({ url: ruta, html });
+    }
+    if (omitidasPorTiempo > 0) {
+      advertencias.push(
+        `Auditoria abreviada por presupuesto de tiempo: ${omitidasPorTiempo} pagina(s) interna(s) no se exploraron. Re-auditar especificamente esa URL para cobertura completa.`,
+      );
+      console.error(
+        `[crawler] presupuesto ${transcurridoMs()}ms, ${omitidasPorTiempo} rutas omitidas`,
+      );
     }
 
     let politicaTexto = "";
@@ -491,6 +532,7 @@ async function main() {
         paginas,
         politica_url: politicaUrl,
         politica_texto: politicaTexto,
+        advertencias_crawler: advertencias,
       }),
     );
   } finally {
