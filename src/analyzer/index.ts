@@ -1265,6 +1265,62 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
         'La politica describe los derechos ARCO, ofrece un canal verificable para ejercerlos, informa la revocacion del consentimiento y menciona a la ANPDP como autoridad de tutela.',
     })
   }
+  if (detectores.transferencia.cumple === true) {
+    elementosCumplidos.push({
+      categoria: 'Transferencia internacional de datos',
+      norma: 'Art. 15 Ley 29733 + Art. 6.1.7 DS 016-2024-JUS',
+      evidencia_detectada:
+        'No se detecta transferencia internacional, o se declara con pais destinatario y nivel de proteccion.',
+    })
+  }
+  if (detectores.bancoDatos.cumple === true) {
+    elementosCumplidos.push({
+      categoria: 'Banco de datos personales',
+      norma: 'Art. 18 + Art. 29 + Art. 34 Ley 29733 + Art. 6.1.4 DS 016-2024-JUS',
+      evidencia_detectada:
+        'La politica identifica el banco de datos con codigo RNPDP (sigla literal o "con registro NNNNN").',
+    })
+  }
+  if (detectores.obligatoriedad.cumple === true) {
+    elementosCumplidos.push({
+      categoria: 'Carácter obligatorio o facultativo de los datos',
+      norma: 'Art. 18 Ley 29733 + Guía ANPDP §4.3',
+      evidencia_detectada:
+        'La politica distingue entre datos obligatorios y facultativos para los formularios de captacion.',
+    })
+  }
+  if (detectores.consecuencias.cumple === true) {
+    elementosCumplidos.push({
+      categoria: 'Consecuencias de proporcionar o negar los datos',
+      norma: 'Art. 18 Ley 29733 + Art. 6.1.6 DS 016-2024-JUS',
+      evidencia_detectada:
+        'La politica informa las consecuencias de proporcionar o negar los datos solicitados.',
+    })
+  }
+  if (detectores.automatizadas.cumple === true) {
+    elementosCumplidos.push({
+      categoria: 'Decisiones automatizadas y perfilamiento',
+      norma: 'Art. 6.1.8 DS 016-2024-JUS',
+      evidencia_detectada:
+        'Sin perfilamiento detectado, o se informa expresamente al titular cuando existen decisiones automatizadas.',
+    })
+  }
+  if (detectores.lenguaje.cumple === true) {
+    elementosCumplidos.push({
+      categoria: 'Calidad del lenguaje y forma',
+      norma: 'Art. 5 DS 016-2024-JUS + Guía ANPDP §5',
+      evidencia_detectada:
+        'La politica usa lenguaje detallado, sencillo y expreso; sin transcripciones legales literales ni consentimiento por conducta implicita.',
+    })
+  }
+  if (detectores.reglamento.cumple === true) {
+    elementosCumplidos.push({
+      categoria: 'Vigencia normativa',
+      norma: 'Ley 29733 + DS 016-2024-JUS (reglamento vigente)',
+      evidencia_detectada:
+        'La politica referencia la normativa peruana vigente (Ley 29733 y DS 016-2024-JUS); no cita el DS 003-2013-JUS derogado.',
+    })
+  }
   if (formularios.length > 0 && formularios.every((f) => !f.checkbox_premarcado)) {
     elementosCumplidos.push({
       categoria: 'Consentimiento activo en formularios',
