@@ -43,7 +43,7 @@ function recalcularPuntaje(resultado: ResultadoAuditoria): {
 export const TITULO_REPORTE = "AUDITORÍA EN PROTECCIÓN DE DATOS PERSONALES DE SITIOS WEB";
 
 export const DISCLAIMER_REPORTE =
-  "This report is based on evidence observable from public web pages and on the rule set selected by the user. It does not constitute a full legal certification of compliance and should be complemented with documentary, contractual, organizational and technical evidence when applicable.";
+  "Este informe se basa en evidencia observable desde páginas web públicas y en el conjunto de reglas seleccionado por el usuario. No constituye una certificación legal completa de cumplimiento y debe complementarse con evidencia documental, contractual, organizativa y técnica cuando corresponda.";
 
 function escaparHtml(valor: unknown): string {
   return String(valor ?? "")

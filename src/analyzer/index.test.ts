@@ -262,4 +262,39 @@ describe("analizarCumplimiento", () => {
     );
     expect(observacionDomicilio).toBeDefined();
   });
+
+  it("cuando no hay politica de privacidad emite MUY GRAVE + observaciones por elemento del Art. 18 y puntaje muy bajo", async () => {
+    // Caso real avendano.pe: la web no tiene politica de privacidad. El
+    // cuadro_art18 muestra 12 INCUMPLE y el puntaje debe reflejarlo.
+    // Regresion contra el bug previo en que el puntaje quedaba en 82/100
+    // (solo una observacion GRAVE -15) pese a tener 12 elementos faltantes.
+    const resultado = await analizarCumplimiento({
+      url_auditada: "http://www.avendano.pe/",
+      politica_privacidad: { encontrada: false, texto: "" },
+      formularios: [],
+      cookies_banner: { encontrado: false, texto: "" },
+      html_completo: "<html></html>",
+    });
+
+    const obsExistencia = resultado.observaciones.find(
+      (o) => o.categoria === "Existencia de política de privacidad",
+    );
+    expect(obsExistencia).toBeDefined();
+    expect(obsExistencia?.severidad).toBe("MUY GRAVE");
+
+    // El cuadro_art18 muestra 12 INCUMPLE; la cantidad de observaciones
+    // del Modulo A debe estar en el mismo orden de magnitud (umbrella +
+    // las del Art. 18 que aplican sobre texto vacio).
+    const obsModuloA = resultado.observaciones.filter((o) => o.modulo === "A");
+    expect(obsModuloA.length).toBeGreaterThanOrEqual(8);
+
+    // Puntaje muy bajo (la suma de penalidades excede 100, queda en 0).
+    expect(resultado.puntaje_cumplimiento).toBeLessThanOrEqual(20);
+
+    // Clasificacion correcta: 3+ elementos faltantes => GRAVE Art. 133.2.
+    expect(resultado.elementos_faltantes_art18).toBeGreaterThanOrEqual(3);
+    expect(
+      resultado.metodologia_calificacion?.clasificacion_deber_informar?.clasificacion,
+    ).toBe("GRAVE");
+  });
 });

@@ -617,22 +617,30 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
 
   // ── MÓDULO A: POLÍTICA DE PRIVACIDAD ──
 
-  // A.0 — Existencia de la política
+  // A.0 — Existencia de la política. Si no existe se emite una observacion
+  // MUY GRAVE (incumplimiento total del deber de informar Art. 18 + Art.
+  // 133.2 DS 016-2024-JUS) y se DEJA QUE corran los chequeos A.2–A.12
+  // sobre texto vacio: cada elemento ausente del Art. 18 emite su propia
+  // observacion. Esto evita la incoherencia previa en que el cuadro_art18
+  // mostraba 8 INCUMPLE pero el puntaje solo deducia un GRAVE — situacion
+  // en la que "no tener politica" puntuaba mejor que "tener una politica
+  // mala con los mismos elementos faltantes".
   if (!politica_privacidad?.encontrada || !texto || texto.length < 100) {
     observaciones.push({
       id: `OBS-${String(observaciones.length + 1).padStart(2, '0')}`,
       modulo: 'A',
       categoria: 'Existencia de política de privacidad',
-      severidad: 'GRAVE',
-      hallazgo: 'No se encontró política de privacidad publicada o accesible en el sitio web.',
+      severidad: 'MUY GRAVE',
+      hallazgo: 'No se encontró política de privacidad publicada o accesible en el sitio web. Esto configura un incumplimiento total del deber de informar.',
       evidencia: 'AUSENTE: no se encontró documento de política de privacidad.',
       norma_vulnerada: 'Art. 18 párrafo 2 Ley 29733 + Art. 7 DS 016-2024-JUS',
-      riesgo_infraccion: 'grave',
+      riesgo_infraccion: 'muy grave',
       base_infraccion: 'Art. 133.2 DS 016-2024-JUS (incumplimiento total del deber de informar)',
-      recomendacion: 'Publicar una Política de Privacidad fácilmente accesible e identificable desde el sitio web, preferiblemente desde el footer.'
+      recomendacion: 'Publicar una Política de Privacidad fácilmente accesible e identificable desde el sitio web, preferiblemente desde el footer, que cubra todos los elementos exigidos por el Art. 18 Ley 29733.'
     })
-    contadorElementosFaltantesArt18 += 8 // todos los elementos faltan
-  } else {
+  }
+
+  {
 
     // A.2 — Identidad y domicilio
     const r_identidad = detectores.identidad
