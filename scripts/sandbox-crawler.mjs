@@ -112,7 +112,12 @@ const PROBES_FORMULARIOS = [
 const URLS_NO_NAVEGABLES =
   /^(mailto|tel|javascript|sms|whatsapp):|\.(png|jpg|jpeg|gif|svg|webp|pdf|zip|rar|7z|ico|css|js|woff|woff2|ttf|otf|eot|mp4|mp3|webm|mov|avi)(\?|#|$)/i;
 
-const TIMEOUT_NAV_MS = 30_000;
+// Timeouts dimensionados para caber dentro del maxDuration=60s del Function.
+// Peor caso por pagina: TIMEOUT_NAV_MS + TIMEOUT_NETWORKIDLE_MS + buffer.
+// Con 20s nav + 8s netidle + 1.5s buffer = 29.5s, podemos hacer home +
+// politica + presupuesto para sondeo y rutas internas sin gatillar
+// FUNCTION_INVOCATION_TIMEOUT.
+const TIMEOUT_NAV_MS = 20_000;
 const TIMEOUT_NETWORKIDLE_MS = 8_000;
 const TIMEOUT_SITEMAP_MS = 10_000;
 
@@ -300,7 +305,7 @@ async function obtenerEnlacesYHtmlHome(browser, url, origen) {
       timeout: TIMEOUT_NAV_MS,
     });
     await page
-      .waitForLoadState("networkidle", { timeout: 15_000 })
+      .waitForLoadState("networkidle", { timeout: TIMEOUT_NETWORKIDLE_MS })
       .catch(() => undefined);
     // Buffer adicional para SPAs / sitios con analytics que jamas
     // alcanzan networkidle. Sin esto, dos audits del mismo sitio pueden
@@ -375,7 +380,7 @@ async function obtenerTextoPolitica(browser, urlPolitica) {
     // Networkidle hasta 15s (algunos sitios con analytics tipo Hotjar
     // nunca llegan a idle; el catch hace que sigamos despues del timeout).
     await page
-      .waitForLoadState("networkidle", { timeout: 15_000 })
+      .waitForLoadState("networkidle", { timeout: TIMEOUT_NETWORKIDLE_MS })
       .catch(() => undefined);
 
     // innerText devuelve solo texto visible; si por algun motivo viene
