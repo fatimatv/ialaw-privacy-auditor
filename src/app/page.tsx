@@ -127,10 +127,25 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: urlNormalizada }),
       });
-      const data = await response.json();
+
+      // Algunas respuestas no son JSON: 504 FUNCTION_INVOCATION_TIMEOUT
+      // de Vercel viene en text/plain, 502/503 a veces como HTML. Si no
+      // intentamos parsear como JSON, el .json() arroja un error opaco
+      // ("Unexpected token 'A'…") en lugar del mensaje real.
+      const contentType = response.headers.get("content-type") ?? "";
+      const esJson = contentType.includes("application/json");
+      const data = esJson ? await response.json().catch(() => null) : null;
 
       if (!response.ok) {
-        throw new Error(data.error ?? "No se pudo completar la auditoria.");
+        const mensajePorStatus =
+          response.status === 504
+            ? "La auditoria tardo mas de 60 segundos. El sitio puede ser muy pesado o estar lento; intenta nuevamente o probá con la URL directa de la política de privacidad."
+            : response.status === 429
+              ? "Has alcanzado el limite de auditorias. Esperá unos minutos y reintentá."
+              : response.status >= 500
+                ? `Error en el servidor (HTTP ${response.status}). Reintentá en unos segundos.`
+                : `No se pudo completar la auditoria (HTTP ${response.status}).`;
+        throw new Error(data?.error ?? mensajePorStatus);
       }
 
       setProgreso(100);
