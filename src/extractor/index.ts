@@ -9,6 +9,7 @@ import type {
   PoliticaPrivacidadDetectada,
   TipoCheckbox,
 } from "../analyzer/types";
+import { seleccionarHrefPolitica } from "../lib/policy-link-selector";
 
 type EvidenciaPublicaEntrada = {
   url: string;
@@ -93,7 +94,13 @@ function textoNormalizado(texto: string): string {
 }
 
 function extraerPolitica($: cheerio.CheerioAPI, url: string, politicaTexto?: string) {
-  const enlace = $("a")
+  // Misma heuristica que el sandbox crawler (src/lib/policy-link-selector):
+  // same-origin gana, cross-origin solo si no es red social y el path
+  // contiene tokens de URL de politica. Antes este extractor cheerio
+  // hacia su propia deteccion permisiva y, aun cuando el crawler en
+  // sandbox no encontraba politica, aqui se pintaba un anchor a LinkedIn
+  // como "politica encontrada" (caso clubialegal.org).
+  const enlaces = $("a")
     .toArray()
     .map((elemento) => {
       const link = $(elemento);
@@ -101,14 +108,20 @@ function extraerPolitica($: cheerio.CheerioAPI, url: string, politicaTexto?: str
         href: resolverUrl(url, link.attr("href")),
         texto: textoNormalizado(link.text()),
       };
-    })
-    .find((link) => TEXTO_POLITICA.test(`${link.texto} ${link.href ?? ""}`));
+    });
+
+  let urlSeleccionada: string | undefined;
+  try {
+    urlSeleccionada = seleccionarHrefPolitica(enlaces, new URL(url));
+  } catch {
+    urlSeleccionada = undefined;
+  }
 
   const texto = textoNormalizado(politicaTexto ?? "");
 
   return {
-    encontrada: Boolean(enlace || texto),
-    url: enlace?.href,
+    encontrada: Boolean(urlSeleccionada || texto),
+    url: urlSeleccionada,
     texto,
   };
 }
