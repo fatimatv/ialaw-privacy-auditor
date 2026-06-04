@@ -114,10 +114,9 @@ const URLS_NO_NAVEGABLES =
 
 // Timeouts dimensionados para caber dentro del maxDuration=60s del Function.
 // Peor caso por pagina: TIMEOUT_NAV_MS + TIMEOUT_NETWORKIDLE_MS + buffer.
-// Con 20s nav + 8s netidle + 1.5s buffer = 29.5s, podemos hacer home +
-// politica + presupuesto para sondeo y rutas internas sin gatillar
-// FUNCTION_INVOCATION_TIMEOUT.
-const TIMEOUT_NAV_MS = 20_000;
+// Con waitUntil="domcontentloaded", el goto suele resolver en <5s en
+// sitios bien armados; el timeout es el tope para casos lentos.
+const TIMEOUT_NAV_MS = 15_000;
 const TIMEOUT_NETWORKIDLE_MS = 8_000;
 const TIMEOUT_SITEMAP_MS = 10_000;
 
@@ -281,7 +280,11 @@ async function abrirYExtraerHtml(browser, url) {
   const page = await context.newPage();
   try {
     await page.goto(url, {
-      waitUntil: "load",
+      // domcontentloaded en vez de load: muchos sitios nunca disparan
+      // el evento load por recursos 3rd-party colgados (analytics, ads,
+      // chats). El networkidle posterior + buffer cubren el contenido
+      // dinamico que llega despues del DOM inicial.
+      waitUntil: "domcontentloaded",
       timeout: TIMEOUT_NAV_MS,
     });
     await page
@@ -301,7 +304,11 @@ async function obtenerEnlacesYHtmlHome(browser, url, origen) {
   const page = await context.newPage();
   try {
     await page.goto(url, {
-      waitUntil: "load",
+      // domcontentloaded en vez de load: muchos sitios nunca disparan
+      // el evento load por recursos 3rd-party colgados (analytics, ads,
+      // chats). El networkidle posterior + buffer cubren el contenido
+      // dinamico que llega despues del DOM inicial.
+      waitUntil: "domcontentloaded",
       timeout: TIMEOUT_NAV_MS,
     });
     await page
@@ -369,11 +376,12 @@ async function obtenerTextoPolitica(browser, urlPolitica) {
 
   const page = await context.newPage();
   try {
-    // waitUntil: "load" en vez de domcontentloaded para esperar todos
-    // los resources (Elementor/WordPress carga contenido en stages).
+    // domcontentloaded + networkidle: para sitios cuyo evento load
+    // nunca dispara por recursos 3rd-party colgados. Elementor/WordPress
+    // carga contenido en stages que el networkidle posterior captura.
     await page
       .goto(urlPolitica, {
-        waitUntil: "load",
+        waitUntil: "domcontentloaded",
         timeout: TIMEOUT_NAV_MS,
       })
       .catch(() => undefined);
