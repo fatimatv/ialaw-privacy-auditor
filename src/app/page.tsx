@@ -21,6 +21,13 @@ const severidadColor: Record<string, string> = {
   MODERADA: "bg-blue-100 text-blue-950",
 };
 
+const PENALIDADES_UI: Record<string, number> = {
+  "MUY GRAVE": 25,
+  GRAVE: 15,
+  IMPORTANTE: 7,
+  MODERADA: 3,
+};
+
 export default function Home() {
   const [url, setUrl] = useState("");
   const [resultado, setResultado] = useState<RespuestaAuditoria | null>(null);
@@ -38,6 +45,34 @@ export default function Home() {
       return acc;
     }, {});
   }, [observaciones]);
+
+  // Recalculamos el puntaje desde las observaciones mostradas. La UI usa
+  // este recalculado como autoridad final para que SIEMPRE coincida con
+  // las observaciones listadas debajo (y con lo que sale en el PDF).
+  // Antes podia haber un desfase si la state se actualizaba parcialmente.
+  const puntajeRecalculado = useMemo(() => {
+    const ded = observaciones.reduce(
+      (acc, o) => acc + (PENALIDADES_UI[o.severidad] ?? 0),
+      0,
+    );
+    return Math.max(0, 100 - ded);
+  }, [observaciones]);
+  const deduccionesRecalculadas = useMemo(() => {
+    const orden = ["MUY GRAVE", "GRAVE", "IMPORTANTE", "MODERADA"];
+    return orden.map((sev) => {
+      const cantidad = observaciones.filter((o) => o.severidad === sev).length;
+      const pen = PENALIDADES_UI[sev] ?? 0;
+      return { severidad: sev, penalidad_unitaria: pen, cantidad, deduccion_total: cantidad * pen };
+    });
+  }, [observaciones]);
+  const deduccionTotalRecalculada = useMemo(
+    () => deduccionesRecalculadas.reduce((a, d) => a + d.deduccion_total, 0),
+    [deduccionesRecalculadas],
+  );
+  const mismatchPuntaje = useMemo(() => {
+    if (!resultado) return false;
+    return puntajeRecalculado !== resultado.resultado.puntaje_cumplimiento;
+  }, [resultado, puntajeRecalculado]);
 
   async function auditar(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -72,10 +107,26 @@ export default function Home() {
     setError("");
 
     try {
+      // Normalizamos el resultado antes de enviarlo al PDF: el
+      // puntaje_cumplimiento, las deducciones y el puntaje_final pasan a
+      // ser los recalculados desde las observaciones que la UI muestra.
+      // Asi el PDF descargado siempre coincide con lo que la usuaria vio
+      // en pantalla. Si el motor envio algo distinto, queda registrado
+      // en el campo `puntaje_motor_reportado` para auditoria interna.
+      const resultadoNormalizado: ResultadoAuditoria = {
+        ...resultado.resultado,
+        puntaje_cumplimiento: puntajeRecalculado,
+        metodologia_calificacion: {
+          ...resultado.resultado.metodologia_calificacion,
+          deducciones: deduccionesRecalculadas as ResultadoAuditoria["metodologia_calificacion"]["deducciones"],
+          deduccion_total: deduccionTotalRecalculada,
+          puntaje_final: puntajeRecalculado,
+        },
+      };
       const response = await fetch("/reporte", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ resultado: resultado.resultado }),
+        body: JSON.stringify({ resultado: resultadoNormalizado }),
       });
 
       if (!response.ok) {
@@ -181,11 +232,19 @@ export default function Home() {
               <div className="mt-4 space-y-5">
                 <div>
                   <div className="text-6xl font-black leading-none text-[#011EF4]">
-                    {resultado.resultado.puntaje_cumplimiento}
+                    {puntajeRecalculado}
                   </div>
                   <p className="mt-1 text-xs font-semibold uppercase tracking-wider text-[#6F7072]">
                     Puntaje de cumplimiento
                   </p>
+                  <p className="mt-1 text-[10px] text-[#6F7072]">
+                    Auditoría: {new Date(resultado.resultado.fecha_auditoria).toLocaleString("es-PE", { timeZone: "America/Lima" })}
+                  </p>
+                  {mismatchPuntaje && (
+                    <p className="mt-2 rounded border-l-2 border-amber-500 bg-amber-50 p-2 text-[10px] text-amber-900">
+                      <strong>Aviso:</strong> el puntaje recalculado desde las observaciones ({puntajeRecalculado}) no coincide con el reportado por el motor ({resultado.resultado.puntaje_cumplimiento}). Se muestra el recalculado. Si el desfase persiste, audite nuevamente.
+                    </p>
+                  )}
                 </div>
                 <p className="text-sm leading-6 text-[#374151]">{resultado.resultado.resumen_ejecutivo}</p>
                 <button
@@ -284,7 +343,7 @@ export default function Home() {
                     </tr>
                   </thead>
                   <tbody>
-                    {resultado.resultado.metodologia_calificacion.deducciones.map((d) => (
+                    {deduccionesRecalculadas.map((d) => (
                       <tr key={d.severidad} className="border-b border-[#e6e9f2]">
                         <td className="py-2">{d.severidad}</td>
                         <td className="py-2">−{d.penalidad_unitaria}</td>
@@ -294,9 +353,9 @@ export default function Home() {
                     ))}
                     <tr className="bg-[#fff8df] font-black">
                       <td className="py-2" colSpan={3}>
-                        Puntaje base 100 − total de deducciones ({resultado.resultado.metodologia_calificacion.deduccion_total})
+                        Puntaje base 100 − total de deducciones ({deduccionTotalRecalculada})
                       </td>
-                      <td className="py-2">{resultado.resultado.metodologia_calificacion.puntaje_final} / 100</td>
+                      <td className="py-2">{puntajeRecalculado} / 100</td>
                     </tr>
                   </tbody>
                 </table>

@@ -99,10 +99,24 @@ describe("crearHtmlReporte", () => {
   });
 
   it("renderiza la seccion de metodologia con tabla de deducciones y clasificacion", () => {
+    const obsBase = {
+      modulo: "A",
+      categoria: "X",
+      evidencia: "e",
+      norma_vulnerada: "n",
+      riesgo_infraccion: "leve",
+      base_infraccion: "b",
+      recomendacion: "r",
+    };
     const html = crearHtmlReporte(
       resultadoBase({
         puntaje_cumplimiento: 75,
         elementos_faltantes_art18: 2,
+        observaciones: [
+          { id: "OBS-01", severidad: "GRAVE", hallazgo: "h", ...obsBase },
+          { id: "OBS-02", severidad: "IMPORTANTE", hallazgo: "h", ...obsBase },
+          { id: "OBS-03", severidad: "MODERADA", hallazgo: "h", ...obsBase },
+        ],
         metodologia_calificacion: {
           base: 100,
           deducciones: [
@@ -197,6 +211,52 @@ describe("crearHtmlReporte", () => {
     expect(html).toContain("estado-CUMPLE");
     expect(html).toContain("estado-PARCIAL");
     expect(html).toContain("estado-INCUMPLE");
+  });
+
+  it("recalcula el puntaje desde las observaciones cuando puntaje_cumplimiento no coincide y emite advertencia", () => {
+    const obsBase = {
+      modulo: "A",
+      categoria: "X",
+      evidencia: "e",
+      norma_vulnerada: "n",
+      riesgo_infraccion: "leve",
+      base_infraccion: "b",
+      recomendacion: "r",
+    };
+    const html = crearHtmlReporte(
+      resultadoBase({
+        // Cliente reporta 50 pero las observaciones suman solo 15 (1 GRAVE).
+        // El PDF debe mostrar 85 (recalculado) y advertir del mismatch.
+        puntaje_cumplimiento: 50,
+        observaciones: [
+          { id: "OBS-01", severidad: "GRAVE", hallazgo: "h", ...obsBase },
+        ],
+      }),
+    );
+    expect(html).toContain("85 / 100");
+    expect(html).not.toContain(">50/100<");
+    expect(html).toMatch(/puntaje recibido por el cliente.*50.*no coincide.*85/i);
+  });
+
+  it("no emite advertencia cuando puntaje_cumplimiento y observaciones coinciden", () => {
+    const obsBase = {
+      modulo: "A",
+      categoria: "X",
+      evidencia: "e",
+      norma_vulnerada: "n",
+      riesgo_infraccion: "leve",
+      base_infraccion: "b",
+      recomendacion: "r",
+    };
+    const html = crearHtmlReporte(
+      resultadoBase({
+        puntaje_cumplimiento: 85,
+        observaciones: [
+          { id: "OBS-01", severidad: "GRAVE", hallazgo: "h", ...obsBase },
+        ],
+      }),
+    );
+    expect(html).not.toMatch(/no coincide.*recalculo/i);
   });
 
   it("renderiza elementos cumplidos como tarjetas estructuradas", () => {
