@@ -330,4 +330,53 @@ describe("analizarCumplimiento", () => {
       expect(enCumplidos).toBe(false);
     }
   });
+
+  it("cuando encontrada=true pero texto < 100 chars, trata como no encontrada (cuadro INCUMPLE + 0 cumplidos de detectores)", async () => {
+    // Caso real clubialegal.org: el crawler identifico mal una URL de
+    // LinkedIn como politica; la extraccion fue corta/fallida; pero como
+    // encontrada=true y A.10/A.11 son detectores en negativo (vacuamente
+    // cumple=true sobre texto vacio), el reporte mostraba 2 cumplidos
+    // espurios y cobertura 21% para un sitio sin politica. Regresion.
+    const resultado = await analizarCumplimiento({
+      url_auditada: "https://clubialegal.org/",
+      politica_privacidad: { encontrada: true, texto: "" },
+      formularios: [],
+      cookies_banner: { encontrado: false, texto: "" },
+      html_completo: "<html></html>",
+    });
+
+    // MUY GRAVE OBS-01 debe estar.
+    const obsExistencia = resultado.observaciones.find(
+      (o) => o.categoria === "Existencia de política de privacidad",
+    );
+    expect(obsExistencia?.severidad).toBe("MUY GRAVE");
+
+    // Ningun cumplido viene de los 12 detectores del Art. 18.
+    const categoriasDetectores = new Set([
+      "Identidad y domicilio del responsable",
+      "Finalidad del tratamiento",
+      "Destinatarios de los datos",
+      "Transferencia internacional de datos",
+      "Banco de datos personales",
+      "Carácter obligatorio o facultativo de los datos",
+      "Consecuencias de proporcionar o negar los datos",
+      "Plazo de conservación de datos",
+      "Derechos ARCO y mecanismos de ejercicio",
+      "Decisiones automatizadas y perfilamiento",
+      "Calidad del lenguaje y forma",
+      "Vigencia normativa",
+    ]);
+    const cumplidosDeDetectores = resultado.elementos_cumplidos.filter((c) =>
+      categoriasDetectores.has(c.categoria),
+    );
+    expect(cumplidosDeDetectores).toHaveLength(0);
+
+    // El cuadro Art. 18 debe estar TODO en INCUMPLE.
+    expect(resultado.cuadro_art18.every((e) => e.estado === "INCUMPLE")).toBe(
+      true,
+    );
+
+    // Cobertura 0% (todos INCUMPLE).
+    expect(resultado.cobertura_art18.porcentaje).toBe(0);
+  });
 });

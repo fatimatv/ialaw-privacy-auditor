@@ -594,6 +594,14 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
   const cookies_banner: CookiesBannerDetectado = cookiesBannerEntrada ?? { encontrado: false, texto: '' }
   const html_completo = typeof htmlCompletoEntrada === 'string' ? htmlCompletoEntrada : ''
   const texto = typeof politica_privacidad.texto === 'string' ? politica_privacidad.texto : ''
+  // "Hay política" significa: el crawler la encontro Y el texto extraido
+  // es suficiente para sostener una evaluacion (umbral 100 chars, ver
+  // OBS-01 mas abajo). Si esto es false, todas las reglas Art. 18 caen a
+  // INCUMPLE y ningun detector puede levantar un "cumplido": A.10 y A.11
+  // son detectores en negativo ("no detecte perfilamiento", "no detecte
+  // mal lenguaje") que devuelven cumple=true vacuamente sobre texto
+  // vacio, y sin esta puerta se colaban como cumplidos espurios.
+  const hayPolitica = Boolean(politica_privacidad?.encontrada) && texto.length >= 100
   const observaciones: Observacion[] = []
   let contadorElementosFaltantesArt18 = 0
 
@@ -627,7 +635,7 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
   // mostraba 8 INCUMPLE pero el puntaje solo deducia un GRAVE — situacion
   // en la que "no tener politica" puntuaba mejor que "tener una politica
   // mala con los mismos elementos faltantes".
-  if (!politica_privacidad?.encontrada || !texto || texto.length < 100) {
+  if (!hayPolitica) {
     observaciones.push({
       id: `OBS-${String(observaciones.length + 1).padStart(2, '0')}`,
       modulo: 'A',
@@ -1225,7 +1233,12 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
   // el mismo elemento aparecia simultaneamente como observacion y como
   // cumplido (caso tailoy.com.pe).
   const elementosCumplidos: ElementoCumplido[] = []
-  if (detectores.identidad.cumple === true) {
+  // Sin politica real no hay cumplidos posibles de los detectores Art.18.
+  // El gate `hayPolitica` corta aqui los detectores en negativo (A.10,
+  // A.11) que devolverian cumple=true vacuamente sobre texto vacio. Los
+  // cumplidos transversales (consentimiento activo en formularios) se
+  // evaluan al final con su propia logica independiente.
+  if (hayPolitica && detectores.identidad.cumple === true) {
     elementosCumplidos.push({
       categoria: 'Identidad y domicilio del responsable',
       norma: 'Art. 18 Ley 29733 + Art. 6.1.1 DS 016-2024-JUS',
@@ -1233,7 +1246,7 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
         'Se identificaron razón social/denominación, RUC (cuando aplica) y domicilio con los componentes minimos (via/frase de domicilio + numero o distrito) exigidos por la Guia ANPDP §4.1.',
     })
   }
-  if (detectores.finalidad.cumple === true) {
+  if (hayPolitica && detectores.finalidad.cumple === true) {
     elementosCumplidos.push({
       categoria: 'Finalidad del tratamiento',
       norma: 'Art. 7 + Art. 18 Ley 29733',
@@ -1241,7 +1254,7 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
         'La politica declara finalidades especificas, no usa formulas genericas prohibidas por la Guia ANPDP §4.2 y, cuando hay finalidades adicionales, distingue su mecanismo de consentimiento.',
     })
   }
-  if (detectores.destinatarios.cumple === true) {
+  if (hayPolitica && detectores.destinatarios.cumple === true) {
     elementosCumplidos.push({
       categoria: 'Destinatarios de los datos',
       norma: 'Art. 18 Ley 29733 + Art. 6.1.3 DS 016-2024-JUS',
@@ -1249,7 +1262,7 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
         'La politica identifica destinatarios o declara expresamente que no se transfieren datos a terceros.',
     })
   }
-  if (detectores.plazo.cumple === true) {
+  if (hayPolitica && detectores.plazo.cumple === true) {
     elementosCumplidos.push({
       categoria: 'Plazo de conservación de datos',
       norma: 'Art. 18 Ley 29733 + Art. 6.1.9 DS 016-2024-JUS',
@@ -1257,7 +1270,7 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
         'La politica indica un plazo determinado o un criterio determinable de conservacion de los datos.',
     })
   }
-  if (detectores.arco.cumple === true) {
+  if (hayPolitica && detectores.arco.cumple === true) {
     elementosCumplidos.push({
       categoria: 'Derechos ARCO y mecanismos de ejercicio',
       norma: 'Art. 18-19 Ley 29733 + Art. 6.1.10 DS 016-2024-JUS',
@@ -1265,7 +1278,7 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
         'La politica describe los derechos ARCO, ofrece un canal verificable para ejercerlos, informa la revocacion del consentimiento y menciona a la ANPDP como autoridad de tutela.',
     })
   }
-  if (detectores.transferencia.cumple === true) {
+  if (hayPolitica && detectores.transferencia.cumple === true) {
     elementosCumplidos.push({
       categoria: 'Transferencia internacional de datos',
       norma: 'Art. 15 Ley 29733 + Art. 6.1.7 DS 016-2024-JUS',
@@ -1273,7 +1286,7 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
         'No se detecta transferencia internacional, o se declara con pais destinatario y nivel de proteccion.',
     })
   }
-  if (detectores.bancoDatos.cumple === true) {
+  if (hayPolitica && detectores.bancoDatos.cumple === true) {
     elementosCumplidos.push({
       categoria: 'Banco de datos personales',
       norma: 'Art. 18 + Art. 29 + Art. 34 Ley 29733 + Art. 6.1.4 DS 016-2024-JUS',
@@ -1281,7 +1294,7 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
         'La politica identifica el banco de datos con codigo RNPDP (sigla literal o "con registro NNNNN").',
     })
   }
-  if (detectores.obligatoriedad.cumple === true) {
+  if (hayPolitica && detectores.obligatoriedad.cumple === true) {
     elementosCumplidos.push({
       categoria: 'Carácter obligatorio o facultativo de los datos',
       norma: 'Art. 18 Ley 29733 + Guía ANPDP §4.3',
@@ -1289,7 +1302,7 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
         'La politica distingue entre datos obligatorios y facultativos para los formularios de captacion.',
     })
   }
-  if (detectores.consecuencias.cumple === true) {
+  if (hayPolitica && detectores.consecuencias.cumple === true) {
     elementosCumplidos.push({
       categoria: 'Consecuencias de proporcionar o negar los datos',
       norma: 'Art. 18 Ley 29733 + Art. 6.1.6 DS 016-2024-JUS',
@@ -1297,7 +1310,7 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
         'La politica informa las consecuencias de proporcionar o negar los datos solicitados.',
     })
   }
-  if (detectores.automatizadas.cumple === true) {
+  if (hayPolitica && detectores.automatizadas.cumple === true) {
     elementosCumplidos.push({
       categoria: 'Decisiones automatizadas y perfilamiento',
       norma: 'Art. 6.1.8 DS 016-2024-JUS',
@@ -1305,7 +1318,7 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
         'Sin perfilamiento detectado, o se informa expresamente al titular cuando existen decisiones automatizadas.',
     })
   }
-  if (detectores.lenguaje.cumple === true) {
+  if (hayPolitica && detectores.lenguaje.cumple === true) {
     elementosCumplidos.push({
       categoria: 'Calidad del lenguaje y forma',
       norma: 'Art. 5 DS 016-2024-JUS + Guía ANPDP §5',
@@ -1313,7 +1326,7 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
         'La politica usa lenguaje detallado, sencillo y expreso; sin transcripciones legales literales ni consentimiento por conducta implicita.',
     })
   }
-  if (detectores.reglamento.cumple === true) {
+  if (hayPolitica && detectores.reglamento.cumple === true) {
     elementosCumplidos.push({
       categoria: 'Vigencia normativa',
       norma: 'Ley 29733 + DS 016-2024-JUS (reglamento vigente)',
@@ -1352,7 +1365,6 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
     }
     return descCumple
   }
-  const hayPolitica = Boolean(politica_privacidad?.encontrada) && texto.length >= 100
   const cuadroArt18: ElementoArt18[] = [
     {
       codigo: 'A.2',

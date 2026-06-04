@@ -11,9 +11,7 @@
 import { promises as dns } from "node:dns";
 import net from "node:net";
 import { chromium } from "playwright";
-
-const TEXTO_POLITICA =
-  /(privacidad|protecci[oó]n de datos|datos personales|privacy)/i;
+import { seleccionarHrefPolitica } from "./sandbox-crawler-utils.mjs";
 
 // Defensa en profundidad SSRF: el route handler valida la URL inicial,
 // pero dentro del sandbox vamos a navegar a URLs descubiertas (sitemap,
@@ -152,25 +150,6 @@ function priorizarRutas(urls) {
     else resto.push(u);
   }
   return [...probables, ...resto];
-}
-
-function seleccionarHrefPolitica(enlaces, origen) {
-  const candidatos = enlaces.filter((link) =>
-    TEXTO_POLITICA.test(`${link.texto ?? ""} ${link.href ?? ""}`),
-  );
-  if (candidatos.length === 0) return undefined;
-  // Preferir same-origin: muchos sitios tienen links a politicas de
-  // terceros (Google reCAPTCHA, Cloudflare, etc) que matchean antes
-  // que la politica del propio sitio.
-  const mismoOrigen = candidatos.find((link) => {
-    if (!link.href || !origen) return false;
-    try {
-      return new URL(link.href).origin === origen.origin;
-    } catch {
-      return false;
-    }
-  });
-  return (mismoOrigen ?? candidatos[0])?.href;
 }
 
 async function sondearPathsComunes(origen) {
