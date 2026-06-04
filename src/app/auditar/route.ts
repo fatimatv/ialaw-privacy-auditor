@@ -3,13 +3,21 @@ import { z } from "zod";
 import { analizarCumplimiento } from "@/analyzer";
 import { auditarSitioPublico } from "@/crawler";
 import { limitadorAuditar, obtenerIdentificadorCliente } from "@/lib/rate-limit";
+import { normalizarUrl } from "@/lib/url-normalize";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 const SolicitudAuditoria = z.object({
-  url: z.string().url(),
+  url: z
+    .string()
+    .min(1)
+    .transform((entrada) => normalizarUrl(entrada))
+    .refine((normalizada) => normalizada.length > 0, {
+      message: "URL no soportada (solo http o https).",
+    })
+    .pipe(z.string().url()),
 });
 
 export async function POST(request: Request) {

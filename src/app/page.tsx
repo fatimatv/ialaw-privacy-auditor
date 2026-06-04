@@ -1,8 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import type { ResultadoAuditoria } from "@/analyzer/types";
+import { normalizarUrl } from "@/lib/url-normalize";
+
+const ETAPAS_AUDITORIA: ReadonlyArray<{ desde: number; label: string }> = [
+  { desde: 0, label: "Conectando con el sitio…" },
+  { desde: 30, label: "Cargando contenido público…" },
+  { desde: 55, label: "Localizando política de privacidad…" },
+  { desde: 80, label: "Analizando contra Ley 29733 y DS 016-2024-JUS…" },
+];
 
 type RespuestaAuditoria = {
   resultado: ResultadoAuditoria;
@@ -33,7 +41,34 @@ export default function Home() {
   const [resultado, setResultado] = useState<RespuestaAuditoria | null>(null);
   const [error, setError] = useState("");
   const [cargando, setCargando] = useState(false);
+  const [progreso, setProgreso] = useState(0);
   const [descargandoPdf, setDescargandoPdf] = useState(false);
+
+  // Barra de progreso estimada: avanza asintoticamente hacia 95% durante
+  // la auditoria (la duracion real depende del sitio, no la conocemos en
+  // tiempo real porque /auditar no transmite eventos intermedios). Al
+  // recibir la respuesta saltamos a 100% antes de ocultarla.
+  useEffect(() => {
+    if (!cargando) {
+      setProgreso(0);
+      return;
+    }
+    const inicio = Date.now();
+    const id = setInterval(() => {
+      const t = (Date.now() - inicio) / 1000;
+      // 1 - exp(-t/12) llega a ~95% alrededor de 36 s.
+      const p = Math.min(95, 95 * (1 - Math.exp(-t / 12)));
+      setProgreso(p);
+    }, 200);
+    return () => clearInterval(id);
+  }, [cargando]);
+
+  const etapaActual = useMemo(() => {
+    return (
+      [...ETAPAS_AUDITORIA].reverse().find((e) => progreso >= e.desde)?.label ??
+      ETAPAS_AUDITORIA[0].label
+    );
+  }, [progreso]);
 
   const observaciones = useMemo(
     () => resultado?.resultado.observaciones ?? [],
@@ -76,6 +111,12 @@ export default function Home() {
 
   async function auditar(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const urlNormalizada = normalizarUrl(url);
+    if (!urlNormalizada) {
+      setError("URL no soportada. Solo se aceptan direcciones http o https.");
+      return;
+    }
+    if (urlNormalizada !== url) setUrl(urlNormalizada);
     setCargando(true);
     setError("");
     setResultado(null);
@@ -84,7 +125,7 @@ export default function Home() {
       const response = await fetch("/auditar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url }),
+        body: JSON.stringify({ url: urlNormalizada }),
       });
       const data = await response.json();
 
@@ -92,6 +133,7 @@ export default function Home() {
         throw new Error(data.error ?? "No se pudo completar la auditoria.");
       }
 
+      setProgreso(100);
       setResultado(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo completar la auditoria.");
@@ -199,9 +241,13 @@ export default function Home() {
                 <input
                   id="url"
                   name="url"
-                  type="url"
+                  type="text"
+                  inputMode="url"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
                   required
-                  placeholder="https://empresa.com"
+                  placeholder="empresa.com o https://empresa.com"
                   value={url}
                   onChange={(event) => setUrl(event.target.value)}
                   className="min-h-14 flex-1 rounded-xl border border-[#d9deea] bg-white px-4 text-base outline-none transition focus:border-[#011EF4] focus:ring-4 focus:ring-[#011EF4]/15"
@@ -214,9 +260,32 @@ export default function Home() {
                   {cargando ? "Auditando…" : "Auditar"}
                 </button>
               </div>
-              <p className="mt-3 text-xs leading-5 text-[#6F7072]">
-                Sin APIs externas ni IA. No se envían formularios ni se accede a áreas privadas.
-              </p>
+              {cargando ? (
+                <div
+                  className="mt-4 space-y-2"
+                  role="status"
+                  aria-live="polite"
+                  aria-label="Auditando"
+                >
+                  <div className="flex items-center justify-between text-xs font-semibold text-[#011EF4]">
+                    <span>{etapaActual}</span>
+                    <span className="tabular-nums">{Math.round(progreso)}%</span>
+                  </div>
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-[#e6e9f2]">
+                    <div
+                      className="h-full rounded-full bg-[#011EF4] transition-[width] duration-300 ease-out"
+                      style={{ width: `${progreso}%` }}
+                    />
+                  </div>
+                  <p className="text-[11px] leading-4 text-[#6F7072]">
+                    El tiempo estimado depende del sitio. Suele tardar entre 15 y 45 segundos.
+                  </p>
+                </div>
+              ) : (
+                <p className="mt-3 text-xs leading-5 text-[#6F7072]">
+                  Sin APIs externas ni IA. No se envían formularios ni se accede a áreas privadas.
+                </p>
+              )}
             </form>
           </div>
         </div>
