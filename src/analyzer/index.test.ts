@@ -415,4 +415,64 @@ describe("analizarCumplimiento", () => {
     const sumaPesos = r.cuadro_art18.reduce((a, e) => a + e.peso, 0);
     expect(sumaPesos).toBe(27);
   });
+
+  it("A.4b reconoce 'destinatario ubicado en pais extranjero' como declaracion de transferencia (caso starbucks.pe)", async () => {
+    // La politica de Starbucks Peru declara expresamente: "Amazon Web
+    // Service Inc, ubicado en ..., USA" y "Salesforce INC, ubicado en
+    // Dulles - Virgina - Estados Unidos". Esto ES una declaracion de
+    // transferencia internacional bajo Art. 15 Ley 29733: identifica al
+    // destinatario y al pais. La unica deficiencia que queda es no
+    // declarar el sustento legal (nivel adecuado / clausulas tipo) ->
+    // A.4b debe ser PARCIAL, NUNCA INCUMPLE.
+    const texto = `
+      Compartimos su informacion con los siguientes proveedores:
+      Amazon Web Service Inc, ubicado en 21147-21155 Smith Switch Rd, Ashburn, VA 20147, USA,
+      empresa encargada de brindar los servicios de Host de la pagina web.
+      Salesforce INC, ubicado en Dulles - Virgina - Estados Unidos,
+      encargado de la administracion del Programa de Rewards.
+      Tambien recopilamos datos personales como nombre y correo.
+      Finalidad: brindar el servicio. Plazo de conservacion: 5 anos.
+      Banco de datos: RNPDP-PJP N° 12345.
+      Derechos ARCO via correo a privacidad@example.com. ANPDP como autoridad de tutela.
+      Puede revocar su consentimiento en cualquier momento.
+      Ley N° 29733 y DS 016-2024-JUS.
+    `;
+    const r = await analizarCumplimiento({
+      url_auditada: "https://www.starbucks.pe/",
+      politica_privacidad: { encontrada: true, texto },
+      formularios: [],
+      cookies_banner: { encontrado: false, texto: "" },
+      html_completo: "",
+    });
+    const a4b = r.cuadro_art18.find((e) => e.codigo === "A.4b");
+    expect(a4b?.estado).toBe("PARCIAL");
+    const obs = r.observaciones.find((o) => o.categoria === "Transferencia internacional de datos");
+    expect(obs?.nivel).toBe("SIN_NIVEL_PROTECCION");
+  });
+
+  it("A.4b no se engana con 'consentimiento ... transferencia' separados por todo el documento", async () => {
+    // Antes el regex de mencionaNivelAdecuado tenia `consentimiento.*
+    // transferencia` que matcheaba sobre el documento entero. Una
+    // politica con "consentimiento" en un parrafo y "transferencia de
+    // activos comerciales" en otro pasaba como si declarara nivel
+    // adecuado, marcando CUMPLE cuando deberia ser PARCIAL.
+    const texto = `
+      Usted otorga su consentimiento libre, expreso, informado y previo para el tratamiento.
+      Compartimos datos con: Amazon Web Service Inc, ubicado en USA, encargado de hosting.
+      Si nos involucramos en una fusion u otra situacion que implique la transferencia
+      de algunos o todos nuestros activos comerciales, podemos compartir su informacion.
+      Finalidad: brindar el servicio. Plazo: 5 anos. Banco de datos RNPDP-PJP N° 12345.
+      Derechos ARCO: privacidad@example.com. ANPDP como autoridad de tutela.
+      Ley 29733 y DS 016-2024-JUS.
+    `;
+    const r = await analizarCumplimiento({
+      url_auditada: "https://example.com/",
+      politica_privacidad: { encontrada: true, texto },
+      formularios: [],
+      cookies_banner: { encontrado: false, texto: "" },
+      html_completo: "",
+    });
+    const a4b = r.cuadro_art18.find((e) => e.codigo === "A.4b");
+    expect(a4b?.estado).toBe("PARCIAL");
+  });
 });

@@ -234,8 +234,29 @@ const det = {
     ]
     const regexServicios = new RegExp(serviciosExtranjeros.join('|'), 'i')
     const mencionaServicioExterno = regexServicios.test(t)
-    const paisesExtranjeros = /(estados\s+unidos|usa|u\.s\.a|europa|españa|colombia|chile|argentina|brasil|méxico|canadá|reino\s+unido|alemania|francia|irlanda|holanda|suiza)/i.test(t)
-    const declaraTransferencia = /(transferencia\s+internacional|flujo\s+transfronterizo|fuera\s+del\s+país|fuera\s+del\s+perú|datos.*al\s+extranjero|países\s+con\s+nivel\s+adecuado)/i.test(t)
+    const PAISES_EXT_INNER = 'estados\\s+unidos|\\bUSA\\b|u\\.s\\.a\\.?|EE\\.?\\s*UU\\.?|europa|españa|colombia|chile|argentina|brasil|méxico|canad[áa]|reino\\s+unido|alemania|francia|irlanda|holanda|pa[ií]ses\\s+bajos|suiza'
+    const paisesExtranjeros = new RegExp(`(${PAISES_EXT_INNER})`, 'i').test(t)
+    // declaraTransferencia acepta dos formas:
+    //  (a) la formula literal "transferencia internacional / flujo
+    //      transfronterizo / fuera del pais / fuera del peru / datos al
+    //      extranjero / paises con nivel adecuado".
+    //  (b) identificacion del destinatario por su ubicacion en un pais
+    //      extranjero ("ubicado/domiciliado/sede/oficinas en ... Estados
+    //      Unidos / USA / Chile / ..."). El Art. 15 Ley 29733 + Art.
+    //      6.1.7 DS 016-2024-JUS no exigen la frase literal "transferencia
+    //      internacional": basta con que la politica nombre al
+    //      destinatario y a su pais. Caso real starbucks.pe: declara
+    //      "Amazon Web Service Inc, ubicado en ..., USA" y "Salesforce
+    //      INC, ubicado en Dulles - Virgina - Estados Unidos" — esa es
+    //      la forma estandar en politicas peruanas y deberia contar como
+    //      declaracion (la deficiencia que QUEDA ahi es no informar el
+    //      sustento legal de la transferencia, que es PARCIAL).
+    const formulaLiteral = /(transferencia\s+internacional|flujo\s+transfronterizo|fuera\s+del\s+país|fuera\s+del\s+perú|datos.*al\s+extranjero|países\s+con\s+nivel\s+adecuado)/i.test(t)
+    const destinatarioUbicadoEnExterior = new RegExp(
+      `(ubicad[oa]\\s+en|domiciliad[oa]\\s+en|con\\s+sede\\s+en|sede\\s+(social\\s+)?en|domicilio\\s+(social\\s+)?en|oficinas?\\s+en|residen(cia|te)?\\s+en|establecid[oa]\\s+en)[^.]{0,250}(${PAISES_EXT_INNER})`,
+      'i',
+    ).test(t)
+    const declaraTransferencia = formulaLiteral || destinatarioUbicadoEnExterior
     const declaraNoTransfiere = declaraQueNoComparte(t)
 
     if (declaraNoTransfiere) return { cumple: true }
@@ -256,7 +277,13 @@ const det = {
       // (b) un patron gramatical clasico ("a [Pais]", "hacia [Pais]",
       //     "pais destinatario", "[Empresa] (proveedor").
       const indicaPais = paisesExtranjeros || /(a\s+[A-ZÁÉÍÓÚ][a-záéíóú]+|hacia\s+[A-Z]|pa[ií]s\s+destinatario|[A-Z][a-z]+\s+\(proveedor|localizaci[oó]n\s*:|domicilio\s+en\s+[A-Z])/i.test(t)
-      const mencionaNivelAdecuado = /(nivel\s+adecuado|nivel\s+de\s+protecci[oó]n|cl[áa]usulas\s+contractuales|mecanismo\s+alternativo|consentimiento.*transferencia|garant[ií]as\s+(adecuadas|suficientes))/i.test(t)
+      // El patron de consentimiento debe ser estricto: "consentimiento
+      // expreso/explicito/informado/previo [para/a la] transferencia
+      // [internacional]". Antes era `consentimiento.*transferencia` que
+      // matcheaba sobre el documento entero (consentimiento general en
+      // un parrafo + "transferencia" de activos comerciales en otro) y
+      // marcaba CUMPLE politicas que no declaraban sustento legal.
+      const mencionaNivelAdecuado = /(nivel\s+adecuado|nivel\s+de\s+protecci[oó]n|cl[áa]usulas\s+contractuales(\s+tipo)?|normas\s+corporativas\s+vinculantes|mecanismo\s+alternativo|consentimiento\s+(expreso|expl[íi]cito|informado|previo|libre)[^.]{0,80}(la\s+|esta\s+|dicha\s+|para\s+(la\s+)?)?transferencia|transferencia\s+[^.]{0,80}consentimiento\s+(expreso|expl[íi]cito|informado|previo|libre)|garant[ií]as\s+(adecuadas|suficientes))/i.test(t)
       if (!indicaPais) {
         return {
           cumple: false,
