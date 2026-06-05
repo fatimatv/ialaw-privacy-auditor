@@ -98,7 +98,13 @@ export function Footer() {
       <div className="border-t border-white/15">
         <div className="mx-auto flex max-w-6xl flex-col gap-3 px-6 py-5 text-xs text-white/70 sm:flex-row sm:items-center sm:justify-between sm:px-10">
           <span>© {new Date().getFullYear()} Iriarte &amp; Asociados. Todos los derechos reservados.</span>
-          <span>Motor determinístico — no reemplaza la auditoría legal especializada.</span>
+          <span>
+            <a href="/metodologia" className="font-semibold text-white/90 underline hover:text-[#FBBB02]">
+              Metodología
+            </a>
+            <span className="mx-2 opacity-50">·</span>
+            Motor determinístico — no reemplaza la auditoría legal especializada.
+          </span>
         </div>
       </div>
     </footer>

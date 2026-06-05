@@ -7,14 +7,14 @@ function metodologiaVacia(puntaje: number): CalculoPuntaje {
     base: 100,
     deducciones: [
       { severidad: "MUY GRAVE", penalidad_unitaria: 25, cantidad: 0, deduccion_total: 0 },
-      { severidad: "GRAVE", penalidad_unitaria: 15, cantidad: 0, deduccion_total: 0 },
-      { severidad: "IMPORTANTE", penalidad_unitaria: 7, cantidad: 0, deduccion_total: 0 },
-      { severidad: "MODERADA", penalidad_unitaria: 3, cantidad: 0, deduccion_total: 0 },
+      { severidad: "GRAVE", penalidad_unitaria: 3, cantidad: 0, deduccion_total: 0 },
+      { severidad: "IMPORTANTE", penalidad_unitaria: 2, cantidad: 0, deduccion_total: 0 },
+      { severidad: "MODERADA", penalidad_unitaria: 1, cantidad: 0, deduccion_total: 0 },
     ],
     deduccion_total: 100 - puntaje,
     puntaje_final: puntaje,
     formula_texto:
-      "Puntaje = 100 − Σ(observaciones × penalidad por severidad). Penalidades: MUY GRAVE −25, GRAVE −15, IMPORTANTE −7, MODERADA −3. Limite inferior 0.",
+      "Puntaje = cobertura del Art. 18 ponderada por severidad. Pesos: MUY GRAVE 4, GRAVE 3, IMPORTANTE 2, MODERADA 1. Estados: CUMPLE 100%, PARCIAL 50%, INCUMPLE 0%.",
     clasificacion_deber_informar: {
       elementos_faltantes_art18: 0,
       clasificacion: "NO_APLICA",
@@ -41,14 +41,6 @@ function resultadoBase(overrides: Partial<ResultadoAuditoria> = {}): ResultadoAu
     advertencias_metodologicas: [],
     metodologia_calificacion: metodologiaVacia(puntaje),
     cuadro_art18: [],
-    cobertura_art18: {
-      porcentaje: 100,
-      numerador: 1200,
-      denominador: 1200,
-      conteo: { CUMPLE: 12, PARCIAL: 0, INCUMPLE: 0, NO_VERIFICADO: 0 },
-      formula_texto:
-        "Cobertura = promedio del estado del cuadro Art. 18: CUMPLE = 100%, PARCIAL = 50%, INCUMPLE = 0%. Los elementos NO_VERIFICADO se excluyen del denominador.",
-    },
     ...overrides,
   };
 }
@@ -128,14 +120,14 @@ describe("crearHtmlReporte", () => {
         metodologia_calificacion: {
           base: 100,
           deducciones: [
-            { severidad: "MUY GRAVE", penalidad_unitaria: 25, cantidad: 0, deduccion_total: 0 },
-            { severidad: "GRAVE", penalidad_unitaria: 15, cantidad: 1, deduccion_total: 15 },
-            { severidad: "IMPORTANTE", penalidad_unitaria: 7, cantidad: 1, deduccion_total: 7 },
-            { severidad: "MODERADA", penalidad_unitaria: 3, cantidad: 1, deduccion_total: 3 },
+            { severidad: "MUY GRAVE", penalidad_unitaria: 4, cantidad: 0, deduccion_total: 0 },
+            { severidad: "GRAVE", penalidad_unitaria: 3, cantidad: 1, deduccion_total: 3 },
+            { severidad: "IMPORTANTE", penalidad_unitaria: 2, cantidad: 1, deduccion_total: 2 },
+            { severidad: "MODERADA", penalidad_unitaria: 1, cantidad: 1, deduccion_total: 1 },
           ],
           deduccion_total: 25,
           puntaje_final: 75,
-          formula_texto: "Puntaje = 100 − Σ(observaciones × penalidad por severidad). Penalidades: MUY GRAVE −25, GRAVE −15, IMPORTANTE −7, MODERADA −3. Limite inferior 0.",
+          formula_texto: "Puntaje = cobertura del Art. 18 ponderada por severidad. Pesos: MUY GRAVE 4, GRAVE 3, IMPORTANTE 2, MODERADA 1. Estados: CUMPLE 100%, PARCIAL 50%, INCUMPLE 0%.",
           clasificacion_deber_informar: {
             elementos_faltantes_art18: 2,
             clasificacion: "LEVE",
@@ -148,7 +140,7 @@ describe("crearHtmlReporte", () => {
       }),
     );
     expect(html).toContain("Metodologia de calificacion");
-    expect(html).toContain("Puntaje = 100");
+    expect(html).toContain("cobertura del Art. 18 ponderada por severidad");
     expect(html).toContain("75 / 100");
     expect(html).toContain("Art. 132.5 DS 016-2024-JUS");
     expect(html).toContain("0.5 a 5 UIT");
@@ -196,6 +188,8 @@ describe("crearHtmlReporte", () => {
             estado: "CUMPLE",
             norma: "Art. 18 Ley 29733",
             comentario: "Identificados",
+            severidad_implicada: "IMPORTANTE",
+            peso: 2,
           },
           {
             codigo: "A.5",
@@ -203,6 +197,8 @@ describe("crearHtmlReporte", () => {
             estado: "PARCIAL",
             norma: "Art. 34 Ley 29733",
             comentario: "Falta código RNPDP",
+            severidad_implicada: "IMPORTANTE",
+            peso: 2,
           },
           {
             codigo: "A.9",
@@ -210,6 +206,8 @@ describe("crearHtmlReporte", () => {
             estado: "INCUMPLE",
             norma: "Art. 18-19 Ley 29733",
             comentario: "ARCO no mencionados",
+            severidad_implicada: "GRAVE",
+            peso: 3,
           },
         ],
       }),

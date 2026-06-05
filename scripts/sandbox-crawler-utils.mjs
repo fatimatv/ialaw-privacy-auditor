@@ -5,44 +5,66 @@
 export const TEXTO_POLITICA =
   /(privacidad|protecci[oó]n de datos|datos personales|privacy)/i;
 
-// Cuando NINGUN anchor del propio sitio matchea TEXTO_POLITICA, antes
-// caiamos al primer candidato cross-origin — y esos suelen ser bios de
-// LinkedIn donde alguien dice "Protección de Datos" en su titulo
-// profesional, no la politica del sitio (caso real: clubialegal.org ->
-// linkedin.com/in/fatimatoche/). DOMINIOS_SOCIALES rechaza esos hosts;
-// PATH_POLITICA exige que el path del href contenga tokens que solo
-// aparecen en URLs de politicas reales, no en perfiles ni posts.
 export const DOMINIOS_SOCIALES =
   /(^|\.)(linkedin|facebook|fb|instagram|twitter|x|youtube|youtu|tiktok|pinterest|reddit|threads|mastodon|bsky|whatsapp|wa|t|telegram|medium|substack|nas\.io|github)\.[a-z.]+$/i;
 export const PATH_POLITICA =
   /(privac|proteccion[-_]?datos|datos[-_]?personales|aviso[-_]?legal|legal\/|politica|terminos|terms|gdpr|lgpd)/i;
+
+// www.iriartelaw.com y iriartelaw.com son el mismo sitio para todo
+// efecto practico. Esta normalizacion las trata como equivalentes.
+function hostnameNormalizado(hostname) {
+  return hostname.replace(/^www\./i, "").toLowerCase();
+}
+
+function mismoRegistrado(a, b) {
+  return hostnameNormalizado(a) === hostnameNormalizado(b);
+}
+
+// Ranking de paths same-site: el primer match no es buen ranking, hay
+// que premiar paths que claramente nombran una politica (ej.
+// /politica-de-privacidad/) y penalizar paths que sugieren herramienta
+// o landing distinta del documento legal (ej. /autodiagnostico-...).
+function puntajePath(pathname) {
+  const p = pathname.toLowerCase();
+  let s = 0;
+  if (/politica[-_/]de[-_/]privacidad|politica[-_/]privacidad|privacy[-_/]policy|aviso[-_/]de[-_/]privacidad|aviso[-_/]privacidad/.test(p)) s += 100;
+  if (/(^|\/)(privacidad|privacy)(\/|$)/.test(p)) s += 60;
+  if (/privac/.test(p)) s += 30;
+  if (/proteccion[-_]?datos|datos[-_]?personales/.test(p)) s += 10;
+  if (/diagnostico|autodiagnostico|servicios|blog|noticias|landing|herramienta|checklist|calculadora|equipo|nosotros|contacto|trabaja|carreras?|press|prensa|portfolio/.test(p)) s -= 50;
+  return s;
+}
 
 export function seleccionarHrefPolitica(enlaces, origen) {
   const candidatos = enlaces.filter((link) =>
     TEXTO_POLITICA.test(`${link.texto ?? ""} ${link.href ?? ""}`),
   );
   if (candidatos.length === 0) return undefined;
-  // 1. Same-origin gana siempre. Cualquier anchor del propio sitio cuyo
-  //    texto/href mencione política se trata como la política del sitio.
-  const mismoOrigen = candidatos.find((link) => {
-    if (!link.href || !origen) return false;
-    try {
-      return new URL(link.href).origin === origen.origin;
-    } catch {
-      return false;
-    }
-  });
-  if (mismoOrigen) return mismoOrigen.href;
-  // 2. Sin same-origin solo aceptamos cross-origin si el HOST no es una
-  //    red social/aggregator y el PATH del href contiene tokens propios
-  //    de una URL de política. El texto del anchor no basta: una bio de
-  //    LinkedIn dice "Protección de Datos" pero linkea a /in/<persona>/,
-  //    no a una política. Cubre tambien CDNs y subdominios de docs que
-  //    alojen una politica legitima (ej. cdn.empresa.com/legal/...).
+
+  // 1. Same-site (apex-equivalente). Entre varios, gana el de mayor
+  //    puntaje de path. Si el mejor es negativo, seguimos a cross-origin.
+  const mismoSitio = candidatos
+    .map((link) => {
+      if (!link.href) return null;
+      let u;
+      try { u = new URL(link.href); } catch { return null; }
+      if (!mismoRegistrado(u.hostname, origen.hostname)) return null;
+      return { href: link.href, score: puntajePath(u.pathname) };
+    })
+    .filter(Boolean);
+
+  if (mismoSitio.length > 0) {
+    mismoSitio.sort((a, b) => b.score - a.score);
+    if (mismoSitio[0].score >= 0) return mismoSitio[0].href;
+  }
+
+  // 2. Cross-origin solo si no es red social y el path tiene tokens
+  //    de politica. Cubre CDNs / docs.X.com legitimos.
   const crossOrigenValido = candidatos.find((link) => {
     if (!link.href) return false;
     try {
       const u = new URL(link.href);
+      if (mismoRegistrado(u.hostname, origen.hostname)) return false;
       if (DOMINIOS_SOCIALES.test(u.hostname)) return false;
       return PATH_POLITICA.test(u.pathname);
     } catch {

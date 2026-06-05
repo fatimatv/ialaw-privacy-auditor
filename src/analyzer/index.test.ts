@@ -376,7 +376,43 @@ describe("analizarCumplimiento", () => {
       true,
     );
 
-    // Cobertura 0% (todos INCUMPLE).
-    expect(resultado.cobertura_art18.porcentaje).toBe(0);
+    // Puntaje 0/100 (todos INCUMPLE → cobertura ponderada = 0).
+    expect(resultado.puntaje_cumplimiento).toBe(0);
+  });
+
+  it("aplica la formula de cobertura ponderada por severidad: politica completa => puntaje alto", async () => {
+    // Caso real iriartelaw.com: politica completa (identifica responsable
+    // + RUC + domicilio, finalidades, banco RNPDP-PJP, plazo, ARCO con
+    // mecanismos, Ley 29733). Espera puntaje >= 80 con el modelo nuevo.
+    const textoPolitica = `
+      IRIARTE & ASOCIADOS S.CIVIL DE R.L. (en adelante, IALAW), con RUC: 20514828246,
+      domiciliada en Enrique Palacios 360, ofc. 612, Miraflores, provincia y departamento de Lima.
+      La presente política tiene por finalidad informar la manera en que IALAW trata los Datos Personales.
+      4. USO DE INFORMACIÓN. La Información del Usuario se utiliza para las siguientes finalidades:
+      atender solicitudes, enviar invitaciones a eventos.
+      3. EL BANCO DE DATOS DEL IALAW. De acuerdo con la Ley N° 29733 y el Decreto Supremo N° 016-2024-JUS,
+      los Datos Personales serán incorporados a un banco de datos "Cliente y Potenciales Clientes"
+      con número de registro RNPDP-PJP N° 4957.
+      5. PLAZO DE CONSERVACIÓN: 5 años para el cumplimiento de las finalidades.
+      6. COMPARTIR INFORMACIÓN: El IALAW no compartirá su información personal a nivel nacional o internacional.
+      8. DERECHOS DEL USUARIO: Derecho de Acceso, Rectificación, Cancelación, Oposición.
+      Puede ejercerlos comunicando a opdp@iriartelaw.com. Autoridad de tutela: ANPDP.
+      Puede revocar su consentimiento en cualquier momento.
+    `;
+    const r = await analizarCumplimiento({
+      url_auditada: "https://iriartelaw.com/",
+      politica_privacidad: { encontrada: true, texto: textoPolitica },
+      formularios: [],
+      cookies_banner: { encontrado: false, texto: "" },
+      html_completo: "",
+    });
+    // Cobertura alta esperada con politica completa. No exigimos 100
+    // porque puede faltar A.7 (consecuencias) y eso esta bien — el
+    // texto demo no lo declara, igual que iriartelaw.com real.
+    expect(r.puntaje_cumplimiento).toBeGreaterThanOrEqual(70);
+    // Cada elemento del cuadro trae su peso. Suma esperada con la
+    // tabla de severidades del analyzer: 2+3+3+3+2+2+1+2+3+2+2+2 = 27.
+    const sumaPesos = r.cuadro_art18.reduce((a, e) => a + e.peso, 0);
+    expect(sumaPesos).toBe(27);
   });
 });

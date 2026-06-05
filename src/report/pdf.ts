@@ -453,11 +453,7 @@ export function crearHtmlReporte(resultado: ResultadoAuditoria, logos: LogosRepo
         <h1>${TITULO_REPORTE}</h1>
         <p class="subtitle">${escaparHtml(resultado.resumen_ejecutivo)}</p>
         <div class="score">${escaparHtml(puntajeFinal)}/100</div>
-        ${
-          resultado.cobertura_art18
-            ? `<div style="margin-top: 8px; font-size: 18px; opacity: 0.85;">Cobertura Art. 18: <strong>${escaparHtml(resultado.cobertura_art18.porcentaje)}%</strong></div>`
-            : ""
-        }
+        <div style="margin-top: 8px; font-size: 14px; opacity: 0.85;">Cobertura del Art. 18 ponderada por severidad</div>
       </div>
       <div>
         <p><strong>Sitio auditado:</strong> ${escaparHtml(resultado.sitio)}</p>
@@ -472,20 +468,11 @@ export function crearHtmlReporte(resultado: ResultadoAuditoria, logos: LogosRepo
       <h2>Resumen ejecutivo</h2>
       <div class="grid">
         <div class="metric"><span>Puntaje</span><strong>${escaparHtml(puntajeFinal)}/100</strong></div>
-        ${
-          resultado.cobertura_art18
-            ? `<div class="metric"><span>Cobertura Art. 18</span><strong>${escaparHtml(resultado.cobertura_art18.porcentaje)}%</strong></div>`
-            : ""
-        }
         <div class="metric"><span>Observaciones</span><strong>${escaparHtml(resultado.observaciones.length)}</strong></div>
         <div class="metric"><span>Elementos faltantes Art. 18</span><strong>${escaparHtml(resultado.elementos_faltantes_art18)}</strong></div>
         <div class="metric"><span>Trackers detectados</span><strong>${escaparHtml(resultado.trackers_detectados.length)}</strong></div>
       </div>
-      ${
-        resultado.cobertura_art18
-          ? `<p style="margin-top: 8px; font-size: 11px; color: #6F7072;">El <strong>puntaje</strong> es una métrica deductiva alineada con Art. 132-133 DS 016-2024-JUS (qué tan grave es lo que no cumple, con piso en 0). La <strong>cobertura</strong> es complementaria: qué % del Art. 18 está cubierto (CUMPLE=100%, PARCIAL=50%, INCUMPLE=0%; ${escaparHtml(resultado.cobertura_art18.conteo.CUMPLE)} cumple, ${escaparHtml(resultado.cobertura_art18.conteo.PARCIAL)} parcial, ${escaparHtml(resultado.cobertura_art18.conteo.INCUMPLE)} incumple).</p>`
-          : ""
-      }
+      <p style="margin-top: 8px; font-size: 11px; color: #6F7072;">El <strong>puntaje</strong> es la cobertura del Art. 18 Ley 29733 ponderada por la severidad de la infracción que cada elemento generaría si estuviera incompleto (MUY GRAVE 4, GRAVE 3, IMPORTANTE 2, MODERADA 1). Estados: CUMPLE 100%, PARCIAL 50%, INCUMPLE 0%. Los elementos NO_VERIFICADO se excluyen del denominador.</p>
       <p class="disclaimer">${DISCLAIMER_REPORTE}</p>
     </section>
 

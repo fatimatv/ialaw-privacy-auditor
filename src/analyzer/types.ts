@@ -121,22 +121,10 @@ export type ElementoArt18 = {
   norma: string;
   /** Resumen breve en una linea: que se detecto o que falta. */
   comentario: string;
-};
-
-// Metrica complementaria al puntaje_cumplimiento. El puntaje (modelo
-// deductivo, alineado con Art. 132-133 DS 016-2024-JUS) responde "que
-// tan grave es lo que no cumple". La cobertura responde "que tanto del
-// Art. 18 esta cubierto". Dos preguntas distintas, dos numeros distintos.
-export type CoberturaArt18 = {
-  /** Porcentaje 0-100 redondeado. */
-  porcentaje: number;
-  /** Suma ponderada de estados (CUMPLE=100, PARCIAL=50, INCUMPLE=0). */
-  numerador: number;
-  /** Cantidad de elementos evaluados × 100 (NO_VERIFICADO se excluye). */
-  denominador: number;
-  /** Conteo por estado para mostrar el desglose. */
-  conteo: { CUMPLE: number; PARCIAL: number; INCUMPLE: number; NO_VERIFICADO: number };
-  formula_texto: string;
+  /** Severidad de la infraccion que se generaria si este elemento estuviera incompleto. Usada como peso en el calculo del puntaje. */
+  severidad_implicada: Severidad;
+  /** Peso numerico de la severidad usado en el calculo: MUY GRAVE=4, GRAVE=3, IMPORTANTE=2, MODERADA=1. */
+  peso: number;
 };
 
 export type ResultadoAuditoria = {
@@ -154,6 +142,4 @@ export type ResultadoAuditoria = {
   metodologia_calificacion: CalculoPuntaje;
   /** Cuadro al vuelo de cada elemento del Art. 18 con su estado. Resumen at-a-glance. */
   cuadro_art18: ElementoArt18[];
-  /** % de cobertura del Art. 18 (complemento al puntaje de cumplimiento). */
-  cobertura_art18: CoberturaArt18;
 };

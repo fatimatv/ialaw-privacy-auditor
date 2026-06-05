@@ -29,13 +29,6 @@ const severidadColor: Record<string, string> = {
   MODERADA: "bg-blue-100 text-blue-950",
 };
 
-const PENALIDADES_UI: Record<string, number> = {
-  "MUY GRAVE": 25,
-  GRAVE: 15,
-  IMPORTANTE: 7,
-  MODERADA: 3,
-};
-
 export default function Home() {
   const [url, setUrl] = useState("");
   const [resultado, setResultado] = useState<RespuestaAuditoria | null>(null);
@@ -81,33 +74,11 @@ export default function Home() {
     }, {});
   }, [observaciones]);
 
-  // Recalculamos el puntaje desde las observaciones mostradas. La UI usa
-  // este recalculado como autoridad final para que SIEMPRE coincida con
-  // las observaciones listadas debajo (y con lo que sale en el PDF).
-  // Antes podia haber un desfase si la state se actualizaba parcialmente.
-  const puntajeRecalculado = useMemo(() => {
-    const ded = observaciones.reduce(
-      (acc, o) => acc + (PENALIDADES_UI[o.severidad] ?? 0),
-      0,
-    );
-    return Math.max(0, 100 - ded);
-  }, [observaciones]);
-  const deduccionesRecalculadas = useMemo(() => {
-    const orden = ["MUY GRAVE", "GRAVE", "IMPORTANTE", "MODERADA"];
-    return orden.map((sev) => {
-      const cantidad = observaciones.filter((o) => o.severidad === sev).length;
-      const pen = PENALIDADES_UI[sev] ?? 0;
-      return { severidad: sev, penalidad_unitaria: pen, cantidad, deduccion_total: cantidad * pen };
-    });
-  }, [observaciones]);
-  const deduccionTotalRecalculada = useMemo(
-    () => deduccionesRecalculadas.reduce((a, d) => a + d.deduccion_total, 0),
-    [deduccionesRecalculadas],
-  );
-  const mismatchPuntaje = useMemo(() => {
-    if (!resultado) return false;
-    return puntajeRecalculado !== resultado.resultado.puntaje_cumplimiento;
-  }, [resultado, puntajeRecalculado]);
+  // El puntaje viene del motor (cobertura ponderada por severidad). El
+  // calculo lo hace el analyzer del lado server sobre el cuadro_art18,
+  // no las observaciones. La UI solo muestra el numero del motor sin
+  // re-calcular.
+  const puntaje = resultado?.resultado.puntaje_cumplimiento ?? 0;
 
   async function auditar(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -164,26 +135,13 @@ export default function Home() {
     setError("");
 
     try {
-      // Normalizamos el resultado antes de enviarlo al PDF: el
-      // puntaje_cumplimiento, las deducciones y el puntaje_final pasan a
-      // ser los recalculados desde las observaciones que la UI muestra.
-      // Asi el PDF descargado siempre coincide con lo que la usuaria vio
-      // en pantalla. Si el motor envio algo distinto, queda registrado
-      // en el campo `puntaje_motor_reportado` para auditoria interna.
-      const resultadoNormalizado: ResultadoAuditoria = {
-        ...resultado.resultado,
-        puntaje_cumplimiento: puntajeRecalculado,
-        metodologia_calificacion: {
-          ...resultado.resultado.metodologia_calificacion,
-          deducciones: deduccionesRecalculadas as ResultadoAuditoria["metodologia_calificacion"]["deducciones"],
-          deduccion_total: deduccionTotalRecalculada,
-          puntaje_final: puntajeRecalculado,
-        },
-      };
+      // El PDF recibe el resultado del motor sin modificaciones. El
+      // puntaje y la tabla de la metodologia se renderizan con los
+      // valores que vienen del server.
       const response = await fetch("/reporte", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ resultado: resultadoNormalizado }),
+        body: JSON.stringify({ resultado: resultado.resultado }),
       });
 
       if (!response.ok) {
@@ -316,40 +274,21 @@ export default function Home() {
               <div className="mt-4 space-y-5">
                 <div>
                   <div className="text-6xl font-black leading-none text-[#011EF4]">
-                    {puntajeRecalculado}
+                    {puntaje}
                   </div>
                   <p className="mt-1 text-xs font-semibold uppercase tracking-wider text-[#6F7072]">
-                    Puntaje de cumplimiento
+                    Puntaje de cumplimiento del Art. 18
+                  </p>
+                  <p className="mt-1 text-[10px] text-[#6F7072]">
+                    Cobertura ponderada por severidad ·{" "}
+                    <a href="/metodologia" className="font-semibold text-[#011EF4] underline">
+                      Ver metodología
+                    </a>
                   </p>
                   <p className="mt-1 text-[10px] text-[#6F7072]">
                     Auditoría: {new Date(resultado.resultado.fecha_auditoria).toLocaleString("es-PE", { timeZone: "America/Lima" })}
                   </p>
-                  {mismatchPuntaje && (
-                    <p className="mt-2 rounded border-l-2 border-amber-500 bg-amber-50 p-2 text-[10px] text-amber-900">
-                      <strong>Aviso:</strong> el puntaje recalculado desde las observaciones ({puntajeRecalculado}) no coincide con el reportado por el motor ({resultado.resultado.puntaje_cumplimiento}). Se muestra el recalculado. Si el desfase persiste, audite nuevamente.
-                    </p>
-                  )}
                 </div>
-                {resultado.resultado.cobertura_art18 && (
-                  <div className="rounded-xl border border-[#dfe3ef] bg-[#f7f8fb] p-4">
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-3xl font-black leading-none text-[#011EF4]">
-                        {resultado.resultado.cobertura_art18.porcentaje}%
-                      </span>
-                      <span className="text-xs font-semibold uppercase tracking-wider text-[#6F7072]">
-                        Cobertura Art. 18
-                      </span>
-                    </div>
-                    <p className="mt-2 text-[10px] leading-4 text-[#6F7072]">
-                      {resultado.resultado.cobertura_art18.conteo.CUMPLE} cumple,{" "}
-                      {resultado.resultado.cobertura_art18.conteo.PARCIAL} parcial,{" "}
-                      {resultado.resultado.cobertura_art18.conteo.INCUMPLE} incumple
-                      {resultado.resultado.cobertura_art18.conteo.NO_VERIFICADO > 0 &&
-                        `, ${resultado.resultado.cobertura_art18.conteo.NO_VERIFICADO} no verificado`}
-                      . CUMPLE = 100%, PARCIAL = 50%, INCUMPLE = 0%.
-                    </p>
-                  </div>
-                )}
                 <p className="text-sm leading-6 text-[#374151]">{resultado.resultado.resumen_ejecutivo}</p>
                 <button
                   type="button"
@@ -433,33 +372,39 @@ export default function Home() {
               </section>
 
               <section className="rounded-2xl border border-[#dfe3ef] bg-white p-6 shadow-sm">
-                <h2 className="text-xs font-black uppercase tracking-[0.18em] text-[#011EF4]">Metodología de calificación</h2>
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <h2 className="text-xs font-black uppercase tracking-[0.18em] text-[#011EF4]">Metodología de calificación</h2>
+                  <a href="/metodologia" className="text-xs font-semibold text-[#011EF4] underline">
+                    Ver detalle completo →
+                  </a>
+                </div>
                 <p className="mt-3 border-l-4 border-[#011EF4] bg-[#f4f6fb] p-3 font-mono text-xs text-[#111827]">
                   {resultado.resultado.metodologia_calificacion.formula_texto}
                 </p>
-                <table className="mt-4 w-full text-sm">
+                <p className="mt-4 text-xs uppercase tracking-wider text-[#6F7072]">
+                  Observaciones por severidad (informativo, no entra en la fórmula)
+                </p>
+                <table className="mt-2 w-full text-sm">
                   <thead>
                     <tr className="border-b border-[#dfe3ef] text-left text-xs uppercase text-[#011EF4]">
                       <th className="py-2 font-black">Severidad</th>
-                      <th className="py-2 font-black">Penalidad</th>
+                      <th className="py-2 font-black">Peso</th>
                       <th className="py-2 font-black">Cantidad</th>
-                      <th className="py-2 font-black">Deducción</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {deduccionesRecalculadas.map((d) => (
+                    {resultado.resultado.metodologia_calificacion.deducciones.map((d) => (
                       <tr key={d.severidad} className="border-b border-[#e6e9f2]">
                         <td className="py-2">{d.severidad}</td>
-                        <td className="py-2">−{d.penalidad_unitaria}</td>
+                        <td className="py-2">{d.penalidad_unitaria}</td>
                         <td className="py-2">{d.cantidad}</td>
-                        <td className="py-2">−{d.deduccion_total}</td>
                       </tr>
                     ))}
                     <tr className="bg-[#fff8df] font-black">
-                      <td className="py-2" colSpan={3}>
-                        Puntaje base 100 − total de deducciones ({deduccionTotalRecalculada})
+                      <td className="py-2" colSpan={2}>
+                        Puntaje del Art. 18 (cobertura ponderada por severidad)
                       </td>
-                      <td className="py-2">{puntajeRecalculado} / 100</td>
+                      <td className="py-2">{puntaje} / 100</td>
                     </tr>
                   </tbody>
                 </table>

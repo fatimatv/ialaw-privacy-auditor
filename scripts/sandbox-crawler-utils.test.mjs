@@ -81,4 +81,66 @@ describe("seleccionarHrefPolitica", () => {
       ),
     ).toBeUndefined();
   });
+
+  it("trata www.X y X como mismo sitio (caso iriartelaw.com)", () => {
+    // Caso real iriartelaw.com: auditamos apex, la politica vive en
+    // www.iriartelaw.com/politica-de-privacidad/. Antes la regla
+    // estricta de same-origin los rechazaba como cross-origin y caia
+    // a un fallback que escogia mal. Con apex-equivalence ambos son
+    // el mismo sitio.
+    const origenApex = new URL("https://iriartelaw.com/");
+    const href = seleccionarHrefPolitica(
+      [
+        {
+          texto: "Política de privacidad",
+          href: "https://www.iriartelaw.com/politica-de-privacidad/",
+        },
+      ],
+      origenApex,
+    );
+    expect(href).toBe("https://www.iriartelaw.com/politica-de-privacidad/");
+  });
+
+  it("entre dos same-site candidatos elige por calidad del path (caso iriartelaw.com)", () => {
+    // En iriartelaw.com habia DOS matches del mismo sitio: la politica
+    // real (/politica-de-privacidad/) y una herramienta diagnostica
+    // (/autodiagnostico-proteccion-datos-personales/). El first-match
+    // se quedaba con la herramienta. El ranking premia el path que
+    // claramente nombra una politica.
+    const origenIriarte = new URL("https://iriartelaw.com/");
+    const href = seleccionarHrefPolitica(
+      [
+        {
+          texto: "Autodiagnóstico de Protección de Datos Personales",
+          href: "https://iriartelaw.com/autodiagnostico-proteccion-datos-personales/",
+        },
+        {
+          texto: "Política de privacidad",
+          href: "https://www.iriartelaw.com/politica-de-privacidad/",
+        },
+      ],
+      origenIriarte,
+    );
+    expect(href).toBe("https://www.iriartelaw.com/politica-de-privacidad/");
+  });
+
+  it("ignora paths sospechosos same-site cuando no hay buen candidato y prueba cross-origin", () => {
+    // Si lo unico same-site es una herramienta diagnostica y existe un
+    // cross-origin de policy real en CDN, gana el cross-origin.
+    const origenIriarte = new URL("https://iriartelaw.com/");
+    const href = seleccionarHrefPolitica(
+      [
+        {
+          texto: "Autodiagnóstico de Protección de Datos Personales",
+          href: "https://iriartelaw.com/autodiagnostico-proteccion-datos-personales/",
+        },
+        {
+          texto: "Política de privacidad",
+          href: "https://cdn.example.com/legal/politica-de-privacidad.pdf",
+        },
+      ],
+      origenIriarte,
+    );
+    expect(href).toBe("https://cdn.example.com/legal/politica-de-privacidad.pdf");
+  });
 });

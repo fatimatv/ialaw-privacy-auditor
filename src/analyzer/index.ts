@@ -1167,19 +1167,23 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
     if (det.detalles && det.detalles.length > 0) obs.detalles = det.detalles.slice()
   }
 
-  // ── PUNTAJE Y RESUMEN ──
-  // Formula transparente: el reporte expone esta tabla para que el
-  // cliente pueda reconstruir el calculo manualmente.
-  const PENALIDADES_POR_SEVERIDAD: Record<Severidad, number> = {
-    'MUY GRAVE': 25,
-    GRAVE: 15,
-    IMPORTANTE: 7,
-    MODERADA: 3,
+  // ── CONTEO DE OBSERVACIONES POR SEVERIDAD (informativo) ──
+  // Mostramos cuantas observaciones cayeron en cada severidad como dato
+  // de contexto. En el modelo previo (deductivo) este conteo manejaba la
+  // formula del puntaje. En el modelo vigente — cobertura del Art. 18
+  // ponderada por severidad — el puntaje se calcula POR ELEMENTO sobre
+  // el cuadro_art18 (ver mas abajo), no a partir de las observaciones.
+  // Esta tabla queda como resumen informativo del reporte.
+  const PESO_POR_SEVERIDAD: Record<Severidad, number> = {
+    'MUY GRAVE': 4,
+    GRAVE: 3,
+    IMPORTANTE: 2,
+    MODERADA: 1,
   }
   const severidadesOrdenadas: Severidad[] = ['MUY GRAVE', 'GRAVE', 'IMPORTANTE', 'MODERADA']
   const deducciones: DeduccionPuntaje[] = severidadesOrdenadas.map((severidad) => {
     const cantidad = observaciones.filter((o) => o.severidad === severidad).length
-    const penalidad_unitaria = PENALIDADES_POR_SEVERIDAD[severidad]
+    const penalidad_unitaria = PESO_POR_SEVERIDAD[severidad]
     return {
       severidad,
       penalidad_unitaria,
@@ -1187,8 +1191,6 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
       deduccion_total: cantidad * penalidad_unitaria,
     }
   })
-  const deduccion_total = deducciones.reduce((acc, d) => acc + d.deduccion_total, 0)
-  const puntaje = Math.max(0, 100 - deduccion_total)
 
   const contMuyGrave = deducciones.find((d) => d.severidad === 'MUY GRAVE')?.cantidad ?? 0
   const contGrave = deducciones.find((d) => d.severidad === 'GRAVE')?.cantidad ?? 0
@@ -1212,16 +1214,6 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
         criterio:
           'No se detectaron elementos faltantes del Art. 18 Ley 29733; no aplica la clasificacion del deber de informar.',
       }
-
-  const metodologia_calificacion: CalculoPuntaje = {
-    base: 100,
-    deducciones,
-    deduccion_total,
-    puntaje_final: puntaje,
-    formula_texto:
-      'Puntaje = 100 − Σ(observaciones × penalidad por severidad). Penalidades: MUY GRAVE −25, GRAVE −15, IMPORTANTE −7, MODERADA −3. Limite inferior 0.',
-    clasificacion_deber_informar: clasificacionDeberInformar,
-  }
 
   // ── ELEMENTOS CUMPLIDOS ──
   // Estructurados como objetos con norma y evidencia para mostrarlos
@@ -1365,6 +1357,28 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
     }
     return descCumple
   }
+  // Severidad implicada por elemento del Art. 18 — refleja la severidad
+  // que el detector emitiria si el elemento estuviera faltante. Es el
+  // peso usado en la formula del puntaje. Severidades alineadas con
+  // las que emite cada bloque de observacion mas arriba en el archivo.
+  const SEVERIDAD_POR_ELEMENTO: Record<string, Severidad> = {
+    'A.2': 'IMPORTANTE',
+    'A.3': 'GRAVE',
+    'A.4': 'GRAVE',
+    'A.4b': 'GRAVE',
+    'A.5': 'IMPORTANTE',
+    'A.6': 'IMPORTANTE',
+    'A.7': 'MODERADA',
+    'A.8': 'IMPORTANTE',
+    'A.9': 'GRAVE',
+    'A.10': 'IMPORTANTE',
+    'A.11': 'IMPORTANTE',
+    'A.12': 'IMPORTANTE',
+  }
+  function pesoDe(codigo: string): { severidad_implicada: Severidad; peso: number } {
+    const severidad = SEVERIDAD_POR_ELEMENTO[codigo] ?? 'IMPORTANTE'
+    return { severidad_implicada: severidad, peso: PESO_POR_SEVERIDAD[severidad] }
+  }
   const cuadroArt18: ElementoArt18[] = [
     {
       codigo: 'A.2',
@@ -1372,6 +1386,7 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
       estado: estado(detectores.identidad),
       norma: 'Art. 18 Ley 29733 + Art. 6.1.1 DS 016-2024-JUS + Guía ANPDP §4.1',
       comentario: comentarioObsOCumplido('Identidad y domicilio del responsable', 'Razón social/denominación, RUC y domicilio completo identificados.'),
+      ...pesoDe('A.2'),
     },
     {
       codigo: 'A.3',
@@ -1379,6 +1394,7 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
       estado: estado(detectores.finalidad),
       norma: 'Art. 7 + Art. 18 Ley 29733 + Art. 10.2 DS 016-2024-JUS + Guía ANPDP §4.2',
       comentario: comentarioObsOCumplido('Finalidad del tratamiento', 'Finalidades declaradas de forma específica y lícita.'),
+      ...pesoDe('A.3'),
     },
     {
       codigo: 'A.4',
@@ -1386,6 +1402,7 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
       estado: estado(detectores.destinatarios),
       norma: 'Art. 18 Ley 29733 + Art. 6.1.3 DS 016-2024-JUS + Guía ANPDP §4.3',
       comentario: comentarioObsOCumplido('Destinatarios de los datos', 'Destinatarios identificados (o expresamente declarado que no hay transferencia).'),
+      ...pesoDe('A.4'),
     },
     {
       codigo: 'A.4b',
@@ -1393,6 +1410,7 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
       estado: estado(detectores.transferencia),
       norma: 'Art. 15 Ley 29733 + Art. 6.1.7 DS 016-2024-JUS',
       comentario: comentarioObsOCumplido('Transferencia internacional de datos', 'Sin transferencia internacional detectada, o declarada con país + nivel de protección.'),
+      ...pesoDe('A.4b'),
     },
     {
       codigo: 'A.5',
@@ -1400,6 +1418,7 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
       estado: estado(detectores.bancoDatos),
       norma: 'Art. 18 + Art. 29 + Art. 34 Ley 29733 + Art. 6.1.4 DS 016-2024-JUS + Guía ANPDP §4.4',
       comentario: comentarioObsOCumplido('Banco de datos personales', 'Banco de datos identificado con código RNPDP.'),
+      ...pesoDe('A.5'),
     },
     {
       codigo: 'A.6',
@@ -1407,6 +1426,7 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
       estado: estado(detectores.obligatoriedad),
       norma: 'Art. 18 Ley 29733 + Guía ANPDP §4.3',
       comentario: comentarioObsOCumplido('Carácter obligatorio o facultativo de los datos', 'La política distingue datos obligatorios de facultativos.'),
+      ...pesoDe('A.6'),
     },
     {
       codigo: 'A.7',
@@ -1414,6 +1434,7 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
       estado: estado(detectores.consecuencias),
       norma: 'Art. 18 Ley 29733 + Art. 6.1.6 DS 016-2024-JUS + Guía ANPDP §4.4',
       comentario: comentarioObsOCumplido('Consecuencias de proporcionar o negar los datos', 'Se informan las consecuencias de proporcionar o no los datos.'),
+      ...pesoDe('A.7'),
     },
     {
       codigo: 'A.8',
@@ -1421,6 +1442,7 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
       estado: estado(detectores.plazo),
       norma: 'Art. 8 + Art. 18 Ley 29733 + Art. 6.1.9 DS 016-2024-JUS + Guía ANPDP §4.6',
       comentario: comentarioObsOCumplido('Plazo de conservación de datos', 'Plazo determinado o criterio determinable indicado.'),
+      ...pesoDe('A.8'),
     },
     {
       codigo: 'A.9',
@@ -1428,6 +1450,7 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
       estado: estado(detectores.arco),
       norma: 'Arts. 18-25 Ley 29733 + Art. 6.1.10 DS 016-2024-JUS + Guía ANPDP §4.7',
       comentario: comentarioObsOCumplido('Derechos ARCO y mecanismos de ejercicio', 'Derechos ARCO declarados con canal de ejercicio, revocación y mención a la ANPDP.'),
+      ...pesoDe('A.9'),
     },
     {
       codigo: 'A.10',
@@ -1435,6 +1458,7 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
       estado: estado(detectores.automatizadas),
       norma: 'Art. 6.1.8 DS 016-2024-JUS',
       comentario: comentarioObsOCumplido('Decisiones automatizadas y perfilamiento', 'Sin perfilamiento detectado, o informado al titular.'),
+      ...pesoDe('A.10'),
     },
     {
       codigo: 'A.11',
@@ -1442,6 +1466,7 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
       estado: estado(detectores.lenguaje),
       norma: 'Art. 5 DS 016-2024-JUS + Guía ANPDP §5',
       comentario: comentarioObsOCumplido('Calidad del lenguaje y forma', 'Lenguaje claro, sin transcripciones legales literales ni consentimiento por conducta implícita.'),
+      ...pesoDe('A.11'),
     },
     {
       codigo: 'A.12',
@@ -1449,40 +1474,48 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
       estado: estado(detectores.reglamento),
       norma: 'Ley 29733 + DS 016-2024-JUS (vigente; reemplazó al DS 003-2013-JUS derogado)',
       comentario: comentarioObsOCumplido('Vigencia normativa', 'La política referencia la normativa peruana vigente.'),
+      ...pesoDe('A.12'),
     },
   ]
 
-  // ── COBERTURA ART. 18 ──
-  // Metrica complementaria al puntaje deductivo. Responde "que % del
-  // Art. 18 esta cubierto" en lugar de "que tan grave es lo que falta".
-  const pesos = { CUMPLE: 100, PARCIAL: 50, INCUMPLE: 0, NO_VERIFICADO: 0 } as const
-  const conteo = { CUMPLE: 0, PARCIAL: 0, INCUMPLE: 0, NO_VERIFICADO: 0 }
-  for (const e of cuadroArt18) conteo[e.estado] = (conteo[e.estado] ?? 0) + 1
-  // NO_VERIFICADO se excluye del denominador: si no se pudo verificar
-  // (p.ej. detector retorna undefined), no penaliza ni premia.
-  const evaluados = cuadroArt18.length - conteo.NO_VERIFICADO
-  const numeradorCobertura = cuadroArt18.reduce(
-    (acc, e) => acc + (pesos[e.estado] ?? 0),
+  // ── PUNTAJE: COBERTURA DEL ART. 18 PONDERADA POR SEVERIDAD ──
+  // Un solo numero que refleja el cumplimiento global del checklist.
+  // Cada elemento del cuadro pesa segun la severidad de la infraccion
+  // que generaria si estuviera incompleto (peso = MUY GRAVE 4, GRAVE 3,
+  // IMPORTANTE 2, MODERADA 1). Sobre eso se aplica el factor del estado
+  // (CUMPLE 100%, PARCIAL 50%, INCUMPLE 0%). NO_VERIFICADO se excluye
+  // del denominador para no premiar ni castigar lo no verificable.
+  // Resultado: 0-100. El sitio tiene "todo el checklist cumplido" -> 100.
+  // El sitio sin politica -> 0 (todo INCUMPLE).
+  const FACTOR_ESTADO: Record<EstadoElemento, number> = {
+    CUMPLE: 100,
+    PARCIAL: 50,
+    INCUMPLE: 0,
+    NO_VERIFICADO: 0,
+  }
+  const elementosEvaluados = cuadroArt18.filter((e) => e.estado !== 'NO_VERIFICADO')
+  const numerador = elementosEvaluados.reduce(
+    (acc, e) => acc + e.peso * FACTOR_ESTADO[e.estado],
     0,
   )
-  const denominadorCobertura = evaluados * 100
-  const porcentajeCobertura =
-    denominadorCobertura === 0
-      ? 0
-      : Math.round((numeradorCobertura / denominadorCobertura) * 100)
-  const cobertura_art18 = {
-    porcentaje: porcentajeCobertura,
-    numerador: numeradorCobertura,
-    denominador: denominadorCobertura,
-    conteo,
+  const denominador = elementosEvaluados.reduce((acc, e) => acc + e.peso * 100, 0)
+  const puntaje = denominador === 0 ? 0 : Math.round((numerador / denominador) * 100)
+  const deduccion_total = 100 - puntaje
+
+  const metodologia_calificacion: CalculoPuntaje = {
+    base: 100,
+    deducciones,
+    deduccion_total,
+    puntaje_final: puntaje,
     formula_texto:
-      'Cobertura = promedio del estado del cuadro Art. 18: CUMPLE = 100%, PARCIAL = 50%, INCUMPLE = 0%. Los elementos NO_VERIFICADO se excluyen del denominador.',
+      'Puntaje = cobertura del Art. 18 ponderada por severidad. Cada elemento del cuadro pesa segun la severidad de la infraccion que generaria si estuviera incompleto (MUY GRAVE 4, GRAVE 3, IMPORTANTE 2, MODERADA 1). Estados: CUMPLE 100%, PARCIAL 50%, INCUMPLE 0%. Los elementos NO_VERIFICADO se excluyen del denominador. La tabla de observaciones por severidad es informativa y no entra en la formula.',
+    clasificacion_deber_informar: clasificacionDeberInformar,
   }
 
   return {
     sitio: url_auditada,
     fecha_auditoria: new Date().toISOString(),
-    resumen_ejecutivo: `Auditoría de cumplimiento bajo Ley N° 29733 y DS N° 016-2024-JUS. Se identificaron ${observaciones.length} observaciones: ${contMuyGrave} muy grave(s), ${contGrave} grave(s), ${contImportante} importante(s), ${contModerada} moderada(s). Puntaje de cumplimiento: ${puntaje}/100. Cobertura del Art. 18: ${porcentajeCobertura}%.`,
+    resumen_ejecutivo: `Auditoría de cumplimiento bajo Ley N° 29733 y DS N° 016-2024-JUS. Se identificaron ${observaciones.length} observaciones: ${contMuyGrave} muy grave(s), ${contGrave} grave(s), ${contImportante} importante(s), ${contModerada} moderada(s). Puntaje de cumplimiento del Art. 18 (cobertura ponderada por severidad): ${puntaje}/100.`,
     puntaje_cumplimiento: puntaje,
     elementos_faltantes_art18: contadorElementosFaltantesArt18,
     clasificacion_deber_informar: clasificacion,
@@ -1499,6 +1532,5 @@ export async function analizarCumplimiento(datosCrawler: DatosCrawlerEntrada = {
     ],
     metodologia_calificacion,
     cuadro_art18: cuadroArt18,
-    cobertura_art18,
   }
 }
