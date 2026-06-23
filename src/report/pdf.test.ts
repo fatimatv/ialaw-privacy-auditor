@@ -6,7 +6,7 @@ function metodologiaVacia(puntaje: number): CalculoPuntaje {
   return {
     base: 100,
     deducciones: [
-      { severidad: "MUY GRAVE", penalidad_unitaria: 25, cantidad: 0, deduccion_total: 0 },
+      { severidad: "MUY GRAVE", penalidad_unitaria: 4, cantidad: 0, deduccion_total: 0 },
       { severidad: "GRAVE", penalidad_unitaria: 3, cantidad: 0, deduccion_total: 0 },
       { severidad: "IMPORTANTE", penalidad_unitaria: 2, cantidad: 0, deduccion_total: 0 },
       { severidad: "MODERADA", penalidad_unitaria: 1, cantidad: 0, deduccion_total: 0 },
@@ -219,7 +219,12 @@ describe("crearHtmlReporte", () => {
     expect(html).toContain("estado-INCUMPLE");
   });
 
-  it("recalcula el puntaje desde las observaciones cuando puntaje_cumplimiento no coincide y emite advertencia", () => {
+  it("usa el puntaje_cumplimiento del analyzer tal cual (modelo de cobertura, no deductivo)", () => {
+    // En el modelo vigente el puntaje viene del analyzer calculado como
+    // cobertura del Art. 18 ponderada por severidad sobre cuadro_art18.
+    // El PDF NO debe recalcularlo desde las observaciones (eso era el
+    // modelo deductivo viejo que producia, p.ej., 69 cuando el analyzer
+    // calculaba 85 — bug visible en portada del PDF).
     const obsBase = {
       modulo: "A",
       categoria: "X",
@@ -231,20 +236,24 @@ describe("crearHtmlReporte", () => {
     };
     const html = crearHtmlReporte(
       resultadoBase({
-        // Cliente reporta 50 pero las observaciones suman solo 15 (1 GRAVE).
-        // El PDF debe mostrar 85 (recalculado) y advertir del mismatch.
-        puntaje_cumplimiento: 50,
+        puntaje_cumplimiento: 85,
         observaciones: [
           { id: "OBS-01", severidad: "GRAVE", hallazgo: "h", ...obsBase },
+          { id: "OBS-02", severidad: "IMPORTANTE", hallazgo: "h", ...obsBase },
+          { id: "OBS-03", severidad: "MODERADA", hallazgo: "h", ...obsBase },
+          { id: "OBS-04", severidad: "MODERADA", hallazgo: "h", ...obsBase },
+          { id: "OBS-05", severidad: "MODERADA", hallazgo: "h", ...obsBase },
         ],
       }),
     );
+    // Portada y resumen deben mostrar 85, no 69 (que era 100−15−7−3−3−3).
+    expect(html).toContain(">85/100<");
     expect(html).toContain("85 / 100");
-    expect(html).not.toContain(">50/100<");
-    expect(html).toMatch(/puntaje recibido por el cliente.*50.*no coincide.*85/i);
+    expect(html).not.toContain(">69/100<");
+    expect(html).not.toContain("69 / 100");
   });
 
-  it("no emite advertencia cuando puntaje_cumplimiento y observaciones coinciden", () => {
+  it("no emite la advertencia falsa de mismatch entre puntaje y observaciones", () => {
     const obsBase = {
       modulo: "A",
       categoria: "X",
@@ -262,7 +271,10 @@ describe("crearHtmlReporte", () => {
         ],
       }),
     );
-    expect(html).not.toMatch(/no coincide.*recalculo/i);
+    // La advertencia "el puntaje recibido por el cliente no coincide..."
+    // era un falso positivo de la logica deductiva legacy. No debe aparecer.
+    expect(html).not.toMatch(/no coincide/i);
+    expect(html).not.toMatch(/recibido por el cliente/i);
   });
 
   it("renderiza elementos cumplidos como tarjetas estructuradas", () => {

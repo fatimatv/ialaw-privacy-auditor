@@ -1,44 +1,4 @@
-import type { ResultadoAuditoria, Severidad } from "../analyzer/types";
-
-const PENALIDADES: Record<Severidad, number> = {
-  "MUY GRAVE": 25,
-  GRAVE: 15,
-  IMPORTANTE: 7,
-  MODERADA: 3,
-};
-
-// Recalcula el puntaje desde las observaciones recibidas. La autoridad
-// final del reporte es lo que esta en el documento PDF: si el cliente
-// envia un resultado con observaciones que NO suman al puntaje_cumplimiento
-// declarado, recomputamos para mantener internal consistency. Esto
-// previene discrepancias UI vs PDF cuando el cliente envia un resultado
-// stale o manipulado.
-function recalcularPuntaje(resultado: ResultadoAuditoria): {
-  puntajeRecalculado: number;
-  deduccionRecalculada: number;
-  conteoSeveridad: Record<Severidad, number>;
-  coincide: boolean;
-} {
-  const severidades: Severidad[] = ["MUY GRAVE", "GRAVE", "IMPORTANTE", "MODERADA"];
-  const conteoSeveridad: Record<Severidad, number> = {
-    "MUY GRAVE": 0,
-    GRAVE: 0,
-    IMPORTANTE: 0,
-    MODERADA: 0,
-  };
-  for (const o of resultado.observaciones) {
-    if (severidades.includes(o.severidad as Severidad)) {
-      conteoSeveridad[o.severidad as Severidad]++;
-    }
-  }
-  const deduccionRecalculada = severidades.reduce(
-    (acc, sev) => acc + conteoSeveridad[sev] * PENALIDADES[sev],
-    0,
-  );
-  const puntajeRecalculado = Math.max(0, 100 - deduccionRecalculada);
-  const coincide = puntajeRecalculado === resultado.puntaje_cumplimiento;
-  return { puntajeRecalculado, deduccionRecalculada, conteoSeveridad, coincide };
-}
+import type { ResultadoAuditoria } from "../analyzer/types";
 
 export const TITULO_REPORTE = "AUDITORÍA EN PROTECCIÓN DE DATOS PERSONALES DE SITIOS WEB";
 
@@ -111,15 +71,12 @@ function renderMarcaInterior(logoHorizontal?: string): string {
 }
 
 export function crearHtmlReporte(resultado: ResultadoAuditoria, logos: LogosReporte = {}): string {
-  // Recalculamos el puntaje desde las observaciones recibidas. Si el
-  // cliente envio un resultado donde puntaje_cumplimiento NO suma al
-  // total de las observaciones (estado stale, dos audits cruzados),
-  // tomamos el recalculado como autoridad final del PDF para que el
-  // documento sea internamente consistente y no muestre 79 en una
-  // parte y 82 en otra. La advertencia de mismatch va al final del
-  // reporte en advertencias metodologicas.
-  const rc = recalcularPuntaje(resultado);
-  const puntajeFinal = rc.puntajeRecalculado;
+  // El puntaje y las deducciones por severidad vienen del analyzer, que
+  // los calcula con el modelo vigente: cobertura del Art. 18 ponderada
+  // por severidad sobre el cuadro_art18 (pesos 4/3/2/1). La tabla de
+  // severidad de observaciones es informativa y NO entra en la formula
+  // (ver comentario en src/analyzer/index.ts antes del calculo).
+  const puntajeFinal = resultado.puntaje_cumplimiento;
 
   const observaciones = resultado.observaciones
     .map(
@@ -159,42 +116,23 @@ export function crearHtmlReporte(resultado: ResultadoAuditoria, logos: LogosRepo
     )
     .join("");
   const trackers = resultado.trackers_detectados.map((item) => `<li>${escaparHtml(item)}</li>`).join("");
-  // Si el puntaje recalculado desde las observaciones NO coincide con
-  // el que el cliente envio, agregamos una advertencia metodologica para
-  // que el lector sepa que el PDF muestra el recalculo desde las
-  // observaciones (autoridad interna) y no el valor recibido.
-  const advertenciasExtra: string[] = [];
-  if (!rc.coincide) {
-    advertenciasExtra.push(
-      `El puntaje recibido por el cliente (${resultado.puntaje_cumplimiento}/100) no coincide con el recalculo desde las observaciones listadas en este reporte (${rc.puntajeRecalculado}/100). Esto indica que el cliente envió un resultado de una auditoría distinta a la que se está reportando. El PDF muestra el recalculo desde las observaciones como autoridad final. Verifique haciendo una nueva auditoría.`,
-    );
-  }
-  const advertencias = [
-    ...advertenciasExtra,
-    ...resultado.advertencias_metodologicas,
-  ]
+  const advertencias = resultado.advertencias_metodologicas
     .map((item) => `<li>${escaparHtml(item)}</li>`)
     .join("");
 
   const m = resultado.metodologia_calificacion;
-  // Las filas de deducciones tambien las regeneramos desde las observaciones
-  // recibidas para que la tabla refleje exactamente lo que el PDF lista
-  // mas abajo. Asi la tabla siempre suma al puntaje mostrado en la portada.
-  const severidadesOrden: Severidad[] = ["MUY GRAVE", "GRAVE", "IMPORTANTE", "MODERADA"];
-  const filasDeducciones = severidadesOrden
-    .map((sev) => {
-      const cantidad = rc.conteoSeveridad[sev];
-      const penalidad = PENALIDADES[sev];
-      const ded = cantidad * penalidad;
-      return `
+  // Filas informativas: cantidad de observaciones por severidad con su
+  // peso relativo (4/3/2/1). NO son deducciones aplicadas al puntaje —
+  // el puntaje del modelo vigente es cobertura sobre el cuadro_art18,
+  // no "100 − suma de deducciones por observaciones".
+  const filasDeducciones = m.deducciones
+    .map((d) => `
         <tr>
-          <td>${escaparHtml(sev)}</td>
-          <td>−${escaparHtml(penalidad)}</td>
-          <td>${escaparHtml(cantidad)}</td>
-          <td>−${escaparHtml(ded)}</td>
+          <td>${escaparHtml(d.severidad)}</td>
+          <td>${escaparHtml(d.penalidad_unitaria)}</td>
+          <td>${escaparHtml(d.cantidad)}</td>
         </tr>
-      `;
-    })
+      `)
     .join("");
   const cdi = m.clasificacion_deber_informar;
 
@@ -514,19 +452,19 @@ export function crearHtmlReporte(resultado: ResultadoAuditoria, logos: LogosRepo
         <thead>
           <tr>
             <th>Severidad</th>
-            <th>Penalidad unitaria</th>
+            <th>Peso relativo</th>
             <th>Observaciones</th>
-            <th>Deduccion</th>
           </tr>
         </thead>
         <tbody>
           ${filasDeducciones}
           <tr class="total-row">
-            <td colspan="3">Puntaje base 100 − total de deducciones (${escaparHtml(rc.deduccionRecalculada)})</td>
+            <td colspan="2">Cobertura del Art. 18 ponderada por severidad</td>
             <td>${escaparHtml(puntajeFinal)} / 100</td>
           </tr>
         </tbody>
       </table>
+      <p style="margin-top: 6px; font-size: 11px; color: #6F7072;">La tabla anterior cuenta las observaciones por severidad como dato de contexto. <strong>No es una resta del puntaje:</strong> el puntaje se calcula como cobertura del Art. 18 sobre el cuadro de elementos, ponderada por severidad (ver fórmula arriba).</p>
       <p style="margin-top: 14px;"><strong>Clasificacion del deber de informar (Art. 132.5 vs 133.2 DS 016-2024-JUS):</strong></p>
       <p>${escaparHtml(cdi.criterio)}</p>
       <p>
